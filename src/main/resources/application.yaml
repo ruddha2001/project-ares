@@ -1,3 +1,9 @@
 spring:
   application:
     name: ares
+  cloud:
+    gcp:
+      sql:
+        enabled: false
+        database-name: "unused"
+        instance-connection-name: "none:none"
