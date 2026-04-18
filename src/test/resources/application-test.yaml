@@ -1,0 +1,15 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - com.google.cloud.spring.autoconfigure.sql.GcpCloudSqlAutoConfiguration
+      - com.google.cloud.spring.autoconfigure.storage.GcpStorageAutoConfiguration
+      - com.google.cloud.spring.autoconfigure.core.GcpContextAutoConfiguration
+
+ares:
+  notion:
+    mcp:
+      enabled: false
+      token: ${NOTION_TOKEN:}
+

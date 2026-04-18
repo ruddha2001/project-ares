@@ -1,15 +1,11 @@
 package codes.ani.ares;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest(properties = {
-		"spring.autoconfigure.exclude=" +
-				"org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration," +
-				"org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration," +
-				"com.google.cloud.spring.autoconfigure.storage.GcpStorageAutoConfiguration," +
-				"com.google.cloud.spring.autoconfigure.core.GcpContextAutoConfiguration"
-})
+@SpringBootTest
+@ActiveProfiles("test")
 class AresApplicationTests {
 
 	@Test
