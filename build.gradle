@@ -17,15 +17,46 @@ repositories {
 	mavenCentral()
 }
 
+ext {
+	set('springCloudGcpVersion', "7.4.6")
+	set('springCloudVersion', "2025.0.0")
+	set('langchain4jVersion', "1.13.0")
+	set('langgraph4jVersion', "1.8.12")
+}
+
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	// --- Web & Cloud ---
 	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'com.google.cloud:spring-cloud-gcp-starter'
+	implementation 'com.google.cloud:spring-cloud-gcp-starter-storage'
+
+	// --- Database & Vector Support ---
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'com.google.cloud:spring-cloud-gcp-starter-sql-postgresql'
+	runtimeOnly 'org.postgresql:postgresql'
+	implementation 'org.hibernate.orm:hibernate-vector:6.4.0.Final'
+
+	// --- AI & Orchestration (LangChain4j) ---
+	implementation 'dev.langchain4j:langchain4j-vertex-ai-gemini'
+	implementation 'dev.langchain4j:langchain4j-anthropic'
+	implementation 'dev.langchain4j:langchain4j-mcp'
+
+	// --- Agentic Graph (LangGraph4j) ---
+	implementation "org.bsc.langgraph4j:langgraph4j-core:${langgraph4jVersion}"
+
+	// --- Standard Tooling ---
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-	testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "com.google.cloud:spring-cloud-gcp-dependencies:${springCloudGcpVersion}"
+		mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+		mavenBom "dev.langchain4j:langchain4j-bom:${langchain4jVersion}"
+	}
 }
 
 tasks.named('test') {
