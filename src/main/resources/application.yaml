@@ -7,3 +7,11 @@ spring:
         enabled: false
         database-name: "unused"
         instance-connection-name: "none:none"
+
+ares:
+  notion:
+    mcp:
+      enabled: false
+      server-command: "npx"
+      args: [ "-y", "@notionhq/notion-mcp-server" ]
+      token: ${NOTION_TOKEN:}
