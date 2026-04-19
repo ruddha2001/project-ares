@@ -2,10 +2,12 @@ package codes.ani.ares.service;
 
 import java.util.Map;
 import java.util.regex.Pattern;
+import org.springframework.stereotype.Service;
 
 /**
  * Sanitizes input text by masking common sensitive data patterns.
  */
+@Service
 public class SanitizationService {
 
     /**
