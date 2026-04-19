@@ -4,6 +4,7 @@ import codes.ani.ares.model.AresState;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.mcp.client.McpClient;
 import dev.langchain4j.service.tool.ToolExecutionResult;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import static dev.langchain4j.internal.Json.toJson;
  * and maps it into the immutable {@link AresState} workflow model.
  */
 @Service
+@ConditionalOnProperty(name = "ares.notion.mcp.enabled", havingValue = "true")
 public class NotionIngestionService {
     private final McpClient notionMcpClient;
 
