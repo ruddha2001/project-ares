@@ -76,16 +76,16 @@ public class NotionIngestionService {
         String rawJson = result.resultText();
         String cleanedContent = extractPlainText(rawJson);
 
-        var updatedTrail = new ArrayList<>(currentState.auditTrail());
+        var updatedTrail = new ArrayList<>(currentState.getAuditTrail());
         updatedTrail.add("Ingested requirements from Notion Page: " + pageId);
 
         return new AresState(
-                currentState.requestId(),
+                currentState.getRequestId(),
                 cleanedContent,
-                currentState.sanitizedRequirement(),
-                currentState.mode(),
+                currentState.getSanitizedRequirement(),
+                currentState.getMode(),
                 Collections.unmodifiableList(updatedTrail),
-                currentState.metadata()
+                currentState.getMetadata()
         );
     }
 }

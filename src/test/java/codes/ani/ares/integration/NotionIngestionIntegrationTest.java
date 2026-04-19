@@ -7,6 +7,8 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties = {
@@ -26,7 +28,7 @@ class NotionIngestionIntegrationTest {
 
     @Test
     void shouldFetchRealDataFromNotion() {
-        AresState initialState = AresState.init("NOTION-TEST-1");
+        AresState initialState = AresState.init("NOTION-TEST-1", Map.of());
 
         String testPageId = System.getenv("NOTION_TEST_PAGE_ID");
 
@@ -34,15 +36,15 @@ class NotionIngestionIntegrationTest {
 
         AresState resultState = notionIngestionService.ingestFromPage(initialState, testPageId);
 
-        assertNotNull(resultState.rawRequirements(), "Raw requirement should not be null");
-        assertFalse(resultState.rawRequirements().isBlank(), "Raw requirement should have text content");
+        assertNotNull(resultState.getRawRequirements(), "Raw requirement should not be null");
+        assertFalse(resultState.getRawRequirements().isBlank(), "Raw requirement should have text content");
 
-        assertTrue(resultState.auditTrail().stream()
+        assertTrue(resultState.getAuditTrail().stream()
                         .anyMatch(log -> log.contains("Ingested requirements from Notion Page")),
                 "Audit trail should record the ingestion");
 
         System.out.println("--- INGESTED CONTENT ---");
-        System.out.println(resultState.rawRequirements());
+        System.out.println(resultState.getRawRequirements());
         System.out.println("------------------------");
     }
 }
