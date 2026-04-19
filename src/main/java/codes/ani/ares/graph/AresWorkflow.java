@@ -13,17 +13,35 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 
+/**
+ * Defines the Ares state workflow that ingests requirements from Notion and sanitizes them.
+ */
 @Component
 @ConditionalOnProperty(name = "ares.notion.mcp.enabled", havingValue = "true")
 public class AresWorkflow {
     private final NotionIngestionService notionIngestionService;
     private final SanitizationService sanitizationService;
 
+    /**
+     * Creates the workflow with the required node services.
+     *
+     * @param notionIngestionService service used to ingest requirements from a Notion page
+     * @param sanitizationService service used to sanitize ingested requirements
+     */
     public AresWorkflow(NotionIngestionService notionIngestionService, SanitizationService sanitizationService) {
         this.notionIngestionService = notionIngestionService;
         this.sanitizationService = sanitizationService;
     }
 
+    /**
+     * Builds the state graph for the Ares pipeline.
+     *
+     * <p>The graph flow is: START -> ingestion -> sanitization -> END.
+     * The ingestion node requires {@code notionPageId} in state metadata.
+     *
+     * @return configured {@link StateGraph} for {@link AresState}
+     * @throws IllegalStateException if graph construction fails
+     */
     public StateGraph<AresState> buildGraph() {
         try {
             return new StateGraph<>(AresState::new)
