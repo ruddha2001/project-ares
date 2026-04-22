@@ -25,7 +25,7 @@ class IngestionRegistryTest {
         Mockito.when(notionProvider.supports("notion://test-page")).thenReturn(true);
         Mockito.when(githubProvider.supports("https://github.com/ruddha2001/project-ares/pull/1")).thenReturn(true);
 
-        registry = new IngestionRegistry(List.of(notionProvider));
+        registry = new IngestionRegistry(List.of(notionProvider, githubProvider));
     }
 
     @Test
@@ -42,8 +42,6 @@ class IngestionRegistryTest {
 
     @Test
     void shouldThrowExceptionWhenNoProviderFound() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            registry.getProvider("unsupported://uri");
-        });
+        assertThrows(IllegalArgumentException.class, () -> registry.getProvider("unsupported://uri"));
     }
 }
