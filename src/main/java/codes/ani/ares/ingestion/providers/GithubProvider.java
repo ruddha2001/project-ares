@@ -20,7 +20,7 @@ import java.util.concurrent.CompletableFuture;
  */
 @Component
 @ConditionalOnProperty(
-        name = "ares.mcp.providers.notion.enabled",
+        name = "ares.mcp.providers.github.enabled",
         havingValue = "true"
 )
 @RequiredArgsConstructor

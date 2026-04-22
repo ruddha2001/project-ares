@@ -10,11 +10,12 @@ spring:
 
 ares:
   mcp:
-    notion:
-      enabled: true
-      server-url: "https://mcp.notion.com/mcp"
-      auth-token: ${NOTION_MCP_TOKEN}
-    github:
-      enabled: false
-      server-url: "https://api.githubcopilot.com/mcp"
-      auth-token: ${GITHUB_MCP_TOKEN}
+    providers:
+      notion:
+        enabled: true
+        server-url: "https://mcp.notion.com/mcp"
+        auth-token: ${NOTION_MCP_TOKEN}
+      github:
+        enabled: false
+        server-url: "https://api.githubcopilot.com/mcp"
+        auth-token: ${GITHUB_MCP_TOKEN}
