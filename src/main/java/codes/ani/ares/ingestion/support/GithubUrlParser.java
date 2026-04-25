@@ -10,20 +10,34 @@ public class GithubUrlParser {
 
     private static final Pattern PR_PATTERN =
             Pattern.compile("^https://github\\.com/(?<owner>[^/]+)/(?<repo>[^/]+)/pull/(?<prNumber>\\d+)/?$");
+    private static final Pattern REPO_PATTERN =
+            Pattern.compile("^https://github\\.com/(?<owner>[^/]+)/(?<repo>[^/]+)/?$");
 
-    public record GitHubPrRef(String owner, String repo, long prNumber) {
+    public record GithubRef(String owner, String repo, Long prNumber) {
+        public boolean isPullRequest() {
+            return prNumber != null;
+        }
     }
 
-    public GitHubPrRef parse(String uri) {
-        Matcher matcher = PR_PATTERN.matcher(uri);
-        if (!matcher.matches()) {
-            throw new IllegalArgumentException("Invalid GitHub PR URL: " + uri);
+    public GithubRef parse(String uri) {
+        Matcher prMatcher = PR_PATTERN.matcher(uri);
+        if (prMatcher.matches()) {
+            return new GithubRef(
+                    prMatcher.group("owner"),
+                    prMatcher.group("repo"),
+                    Long.parseLong(prMatcher.group("prNumber"))
+            );
         }
 
-        return new GitHubPrRef(
-                matcher.group("owner"),
-                matcher.group("repo"),
-                Long.parseLong(matcher.group("prNumber"))
-        );
+        Matcher repoMatcher = REPO_PATTERN.matcher(uri);
+        if (repoMatcher.matches()) {
+            return new GithubRef(
+                    repoMatcher.group("owner"),
+                    repoMatcher.group("repo"),
+                    null
+            );
+        }
+
+        throw new IllegalArgumentException("Unsupported GitHub URI format: " + uri);
     }
 }
