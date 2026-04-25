@@ -39,15 +39,36 @@ public class GithubProvider implements IngestionProvider {
         return sourceUri != null && sourceUri.startsWith("https://github.com");
     }
 
+
     /**
-     * Ingests pull request content from a GitHub source URI.
+     * Ingests data from a GitHub source URL.
      *
-     * @param sourceUri GitHub pull request URL
-     * @return a future containing normalized source data with pull request metadata
+     * <p>For pull request URLs, this reads the pull request content and returns it with
+     * pull request metadata. For repository URLs, this lists repository files from the
+     * repository root (recursively) and returns the resulting file list payload.</p>
+     *
+     * @param sourceUri GitHub URL pointing to either a repository or a pull request
+     * @return a future containing normalized source data and metadata for downstream ingestion
      */
     @Override
     public CompletableFuture<SourceData> ingest(String sourceUri) {
         var ref = parser.parse(sourceUri);
-        return mcpClient.pullRequestRead(ref.owner(), ref.repo(), ref.prNumber()).thenApply(content -> new SourceData(content, Map.of("pr_owner", ref.owner(), "pr_repo", ref.repo(), "pr_number", ref.prNumber()), SourceType.GITHUB_REPO, sourceUri));
+        if (ref.isPullRequest()) {
+            return mcpClient.pullRequestRead(ref.owner(), ref.repo(), ref.prNumber())
+                    .thenApply(content -> new SourceData(
+                            content,
+                            Map.of("prNumber", ref.prNumber()),
+                            SourceType.GITHUB_REPO,
+                            sourceUri
+                    ));
+        } else {
+            return mcpClient.listRepositoryFiles(ref.owner(), ref.repo(), "", true)
+                    .thenApply(fileListJson -> new SourceData(
+                            fileListJson,
+                            Map.of("isRepositoryRoot", true),
+                            SourceType.GITHUB_REPO,
+                            sourceUri
+                    ));
+        }
     }
 }
