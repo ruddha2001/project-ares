@@ -7,6 +7,9 @@ spring:
         enabled: false
         database-name: "unused"
         instance-connection-name: "none:none"
+  threads:
+    virtual:
+      enabled: true
 
 ares:
   mcp:
