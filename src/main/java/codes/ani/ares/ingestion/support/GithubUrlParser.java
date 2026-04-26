@@ -12,18 +12,22 @@ import java.util.regex.Pattern;
 @Component
 public class GithubUrlParser {
 
-    /** Matches GitHub pull request URLs such as {@code https://github.com/{owner}/{repo}/pull/{number}}. */
+    /**
+     * Matches GitHub pull request URLs such as {@code https://github.com/{owner}/{repo}/pull/{number}}.
+     */
     private static final Pattern PR_PATTERN =
-            Pattern.compile("^https://github\\.com/(?<owner>[^/]+)/(?<repo>[^/]+)/pull/(?<prNumber>\\d+)/?$");
-    /** Matches GitHub repository URLs such as {@code https://github.com/{owner}/{repo}}. */
+            Pattern.compile("^https://github\\.com/(?<owner>[^/]+)/(?<repo>[^/]+)/pull/(?<prNumber>\\d+)(?:/.*)?$", Pattern.CASE_INSENSITIVE);
+    /**
+     * Matches GitHub repository URLs such as {@code https://github.com/{owner}/{repo}}.
+     */
     private static final Pattern REPO_PATTERN =
-            Pattern.compile("^https://github\\.com/(?<owner>[^/]+)/(?<repo>[^/]+)/?$");
+            Pattern.compile("^https://github\\.com/(?<owner>[^/]+)/(?<repo>[^/]+)(?:/.*)?$", Pattern.CASE_INSENSITIVE);
 
     /**
      * Parsed GitHub URL components.
      *
-     * @param owner GitHub repository owner or organization
-     * @param repo repository name
+     * @param owner    GitHub repository owner or organization
+     * @param repo     repository name
      * @param prNumber pull request number when URL targets a pull request; otherwise {@code null}
      */
     public record GithubRef(String owner, String repo, Long prNumber) {
@@ -47,11 +51,15 @@ public class GithubUrlParser {
     public GithubRef parse(String uri) {
         Matcher prMatcher = PR_PATTERN.matcher(uri);
         if (prMatcher.matches()) {
-            return new GithubRef(
-                    prMatcher.group("owner"),
-                    prMatcher.group("repo"),
-                    Long.parseLong(prMatcher.group("prNumber"))
-            );
+            try {
+                return new GithubRef(
+                        prMatcher.group("owner"),
+                        prMatcher.group("repo"),
+                        Long.parseLong(prMatcher.group("prNumber"))
+                );
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid pull request number in URI: " + uri, e);
+            }
         }
 
         Matcher repoMatcher = REPO_PATTERN.matcher(uri);
