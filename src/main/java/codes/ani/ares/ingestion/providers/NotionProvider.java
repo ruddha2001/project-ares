@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -44,6 +45,12 @@ public class NotionProvider implements IngestionProvider {
     public CompletableFuture<SourceData> ingest(String sourceUri) {
         String pageId = sourceUri.replace("notion://", "");
 
-        return notionClient.fetchPageContent(pageId).thenApply(content -> new SourceData(content, Map.of("provider", "ARES_MCP_V1", "async_status", "SUCCESS"), SourceType.NOTION, sourceUri));
+        return notionClient.fetchPageContent(pageId).thenApply(content -> new SourceData(content, Map.of("provider", "ARES_MCP_V1", "async_status", "SUCCESS", "extracted_at",
+                Instant.now().toString(), "page_id", pageId), SourceType.NOTION, sourceUri)).exceptionally(ex -> new SourceData(
+                null,
+                Map.of("async_status", "FAILED", "error", ex.getMessage()),
+                SourceType.NOTION,
+                sourceUri
+        ));
     }
 }
