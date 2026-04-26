@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -41,32 +43,56 @@ public class GithubProvider implements IngestionProvider {
 
 
     /**
-     * Ingests data from a GitHub source URL.
+     * Ingests data from a GitHub source URL and normalizes it into {@link SourceData}.
      *
-     * <p>For pull request URLs, this reads the pull request content and returns it with
-     * pull request metadata. For repository URLs, this lists repository files from the
-     * repository root (recursively) and returns the resulting file list payload.</p>
+     * <p>The parsed URL decides which GitHub MCP operation is called:</p>
+     * <ul>
+     *   <li>Pull request URL -> {@code pullRequestRead(owner, repo, prNumber)}</li>
+     *   <li>Repository URL -> {@code listRepositoryFiles(owner, repo, "", true)}</li>
+     * </ul>
+     *
+     * <p>Successful responses include common metadata such as extraction timestamp,
+     * provider identifier, and async status. On async failure, this method returns a
+     * fallback {@link SourceData} with {@code null} content and error metadata so callers
+     * can handle failures without the returned future completing exceptionally.</p>
      *
      * @param sourceUri GitHub URL pointing to either a repository or a pull request
-     * @return a future containing normalized source data and metadata for downstream ingestion
+     * @return a future containing normalized source payload and ingestion metadata
      */
     @Override
     public CompletableFuture<SourceData> ingest(String sourceUri) {
         var ref = parser.parse(sourceUri);
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("extracted_at", Instant.now().toString());
+        metadata.put("provider", "ARES_MCP_V1");
+        metadata.put("async_status", "SUCCESS");
+
         if (ref.isPullRequest()) {
+            metadata.put("pr_number", ref.prNumber());
             return mcpClient.pullRequestRead(ref.owner(), ref.repo(), ref.prNumber())
                     .thenApply(content -> new SourceData(
                             content,
-                            Map.of("prNumber", ref.prNumber()),
-                            SourceType.GITHUB_REPO,
+                            metadata,
+                            SourceType.GITHUB_PR,
+                            sourceUri
+                    )).exceptionally(ex -> new SourceData(
+                            null,
+                            Map.of("async_status", "FAILED", "error", ex.getMessage()),
+                            SourceType.GITHUB_PR,
                             sourceUri
                     ));
         } else {
+            metadata.put("is_repository_root", true);
             return mcpClient.listRepositoryFiles(ref.owner(), ref.repo(), "", true)
                     .thenApply(fileListJson -> new SourceData(
                             fileListJson,
-                            Map.of("isRepositoryRoot", true),
+                            metadata,
                             SourceType.GITHUB_REPO,
+                            sourceUri
+                    )).exceptionally(ex -> new SourceData(
+                            null,
+                            Map.of("async_status", "FAILED", "error", ex.getMessage()),
+                            SourceType.GITHUB_PR,
                             sourceUri
                     ));
         }
