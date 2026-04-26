@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
@@ -45,7 +46,7 @@ public class GithubMcpClientImpl implements GithubMcpClient {
                 log.error("Error fetching GitHub PR content for prUri: {}/{}/{} with reason: {}", prOwner, prRepo, prNumber, e.getMessage(), e);
                 throw new RuntimeException(e);
             }
-        });
+        }, Executors.newVirtualThreadPerTaskExecutor());
     }
 
     @Override
@@ -79,7 +80,7 @@ public class GithubMcpClientImpl implements GithubMcpClient {
                 log.error("Error listing GitHub repository files for repoUri: {}/{} and path: {} with reason: {}", repoOwner, repo, path, e.getMessage(), e);
                 throw new RuntimeException(e);
             }
-        });
+        }, Executors.newVirtualThreadPerTaskExecutor());
     }
 
     @Override
@@ -108,6 +109,6 @@ public class GithubMcpClientImpl implements GithubMcpClient {
                 log.error("Error fetching GitHub file content for repoUri: {}/{} and path: {} with reason: {}", repoOwner, repo, path, e.getMessage(), e);
                 throw new RuntimeException(e);
             }
-        });
+        }, Executors.newVirtualThreadPerTaskExecutor());
     }
 }

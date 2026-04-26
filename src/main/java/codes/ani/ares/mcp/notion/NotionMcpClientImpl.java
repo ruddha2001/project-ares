@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
@@ -41,6 +42,6 @@ public class NotionMcpClientImpl implements NotionMcpClient {
                 log.error("Error fetching Notion page content for pageId: {} with reason: {}", pageId, e.getMessage(), e);
                 throw new RuntimeException(e);
             }
-        });
+        }, Executors.newVirtualThreadPerTaskExecutor());
     }
 }
