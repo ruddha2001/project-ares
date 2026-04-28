@@ -26,9 +26,13 @@ services:
       ares-db:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      SPRING_AUTOCONFIGURE_EXCLUDE: com.google.cloud.spring.autoconfigure.storage.GcpStorageAutoConfiguration,com.google.cloud.spring.autoconfigure.core.GcpContextAutoConfiguration
       SPRING_DATASOURCE_URL: jdbc:postgresql://ares-db:5432/${DB_NAME}
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      NOTION_MCP_TOKEN: ${NOTION_MCP_TOKEN}
+      GITHUB_MCP_TOKEN: ${GITHUB_MCP_TOKEN}
     ports:
       - "8080:8080"
     restart: on-failure
