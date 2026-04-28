@@ -1,5 +1,6 @@
 package codes.ani.ares.ingestion;
 
+import codes.ani.ares.exception.UnsupportedProviderException;
 import codes.ani.ares.ingestion.providers.GithubProvider;
 import codes.ani.ares.ingestion.providers.NotionProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +43,6 @@ class IngestionRegistryTest {
 
     @Test
     void shouldThrowExceptionWhenNoProviderFound() {
-        assertThrows(IllegalArgumentException.class, () -> registry.getProvider("unsupported://uri"));
+        assertThrows(UnsupportedProviderException.class, () -> registry.getProvider("unsupported://uri"));
     }
 }
