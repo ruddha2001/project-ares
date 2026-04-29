@@ -3,7 +3,6 @@ package codes.ani.ares.config;
 import dev.langchain4j.mcp.client.DefaultMcpClient;
 import dev.langchain4j.mcp.client.McpClient;
 import dev.langchain4j.mcp.client.transport.stdio.StdioMcpTransport;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -21,9 +20,6 @@ public class McpConfig {
 
     private final Environment environment;
 
-    @Value("${ares.mcp.providers.notion.auth-token}")
-    private String notionAuthToken;
-
     public McpConfig(Environment environment) {
         this.environment = environment;
     }
@@ -31,6 +27,7 @@ public class McpConfig {
     @Bean
     @ConditionalOnProperty(name = "ares.mcp.providers.notion.enabled", havingValue = "true")
     public McpClient notionMcpClient() {
+        String notionAuthToken = environment.getProperty("ares.mcp.providers.notion.auth-token");
         if (notionAuthToken == null || notionAuthToken.isBlank()) {
             throw new IllegalStateException("Property 'ares.mcp.providers.notion.auth-token' must be set when MCP is enabled");
         }
@@ -44,7 +41,6 @@ public class McpConfig {
         command.add(serverCommand);
         command.addAll(args);
 
-        System.out.println(notionAuthToken);
 
         var transport = new StdioMcpTransport.Builder()
                 .command(command)

@@ -8,8 +8,12 @@ spring:
       - com.google.cloud.spring.autoconfigure.core.GcpContextAutoConfiguration
 
 ares:
-  notion:
-    mcp:
-      enabled: false
-      token: ${NOTION_TOKEN:}
+  mcp:
+    providers:
+      notion:
+        enabled: false
+        auth-token: ""
+      github:
+        enabled: false
+        auth-token: ""
 
