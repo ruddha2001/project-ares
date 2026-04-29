@@ -6,6 +6,7 @@ import dev.langchain4j.mcp.client.McpClient;
 import dev.langchain4j.service.tool.ToolExecutionResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -17,6 +18,7 @@ import static dev.langchain4j.internal.Json.toJson;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "ares.mcp.providers.notion.enabled", havingValue = "true")
 public class NotionMcpClientImpl implements NotionMcpClient {
     private final McpProperties mcpProperties;
     private final McpClient notionMcpClient;
