@@ -4,6 +4,12 @@ WORKDIR /home/gradle/src
 RUN gradle build --no-daemon -x test
 
 FROM eclipse-temurin:21-jre-alpine
+ARG NODE_VERSION=24.11.1
+RUN apk add --no-cache curl tar xz \
+    && curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+    && tar -xJf "node-v${NODE_VERSION}-linux-x64.tar.xz" -C /usr/local --strip-components=1 \
+    && rm "node-v${NODE_VERSION}-linux-x64.tar.xz" \
+    && apk del curl tar xz
 WORKDIR /app
 COPY --from=build /home/gradle/src/build/libs/*.jar app.jar
 
