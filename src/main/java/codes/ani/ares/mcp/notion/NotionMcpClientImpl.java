@@ -1,23 +1,25 @@
 package codes.ani.ares.mcp.notion;
 
 import codes.ani.ares.mcp.config.McpProperties;
-import codes.ani.ares.mcp.model.McpRequest;
-import codes.ani.ares.mcp.model.McpResponse;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.mcp.client.McpClient;
+import dev.langchain4j.service.tool.ToolExecutionResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+
+import static dev.langchain4j.internal.Json.toJson;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotionMcpClientImpl implements NotionMcpClient {
     private final McpProperties mcpProperties;
-    private final RestClient restClient;
+    private final McpClient notionMcpClient;
 
     @Override
     public CompletableFuture<String> fetchPageContent(String pageId) {
@@ -31,13 +33,14 @@ public class NotionMcpClientImpl implements NotionMcpClient {
             log.info("Sending MCP Request to fetch Notion Page: {}", pageId);
 
             try {
-                McpResponse response = restClient.post().uri(config.getServerUrl()).header("Authorization", "Bearer " + config.getAuthToken()).body(new McpRequest("tools/call", Map.of("name", "get", "arguments", Map.of("page_id", pageId)))).retrieve().body(McpResponse.class);
+                ToolExecutionRequest request = ToolExecutionRequest.builder()
+                        .name("API-get-block-children")
+                        .arguments(toJson(Map.of("block_id", pageId)))
+                        .build();
 
-                if (response == null || response.getResult() == null) {
-                    throw new RuntimeException("Empty response from Notion MCP server");
-                }
+                ToolExecutionResult result = notionMcpClient.executeTool(request);
 
-                return response.getResult().getContent().getFirst().getText();
+                return result.resultText();
             } catch (Exception e) {
                 log.error("Error fetching Notion page content for pageId: {} with reason: {}", pageId, e.getMessage(), e);
                 throw new RuntimeException(e);

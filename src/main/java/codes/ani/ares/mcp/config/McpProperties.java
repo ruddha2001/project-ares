@@ -4,6 +4,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -17,5 +18,7 @@ public class McpProperties {
         private boolean enabled;
         private String serverUrl;
         private String authToken;
+        private String serverCommand;
+        private List<String> args;
     }
 }
