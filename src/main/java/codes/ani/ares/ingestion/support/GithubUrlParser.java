@@ -8,10 +8,18 @@ import java.util.regex.Pattern;
 /**
  * Parses supported GitHub URLs into a structured reference containing owner,
  * repository, and optional pull request number.
+ *
+ * <p>Supports two URL patterns:</p>
+ * <ul>
+ *   <li>Pull request: {@code https://github.com/{owner}/{repo}/pull/{number}}</li>
+ *   <li>Repository root: {@code https://github.com/{owner}/{repo}}</li>
+ * </ul>
+ *
+ * <p>Registered as a Spring {@link Component} for injection into
+ * {@link codes.ani.ares.ingestion.providers.GithubProvider} and other consumers.</p>
  */
 @Component
 public class GithubUrlParser {
-
     /**
      * Matches GitHub pull request URLs such as {@code https://github.com/{owner}/{repo}/pull/{number}}.
      */

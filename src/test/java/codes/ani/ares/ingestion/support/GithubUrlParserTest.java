@@ -7,6 +7,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Unit tests for {@link GithubUrlParser} URL parsing and validation logic.
+ */
 class GithubUrlParserTest {
 
     private GithubUrlParser parser;
