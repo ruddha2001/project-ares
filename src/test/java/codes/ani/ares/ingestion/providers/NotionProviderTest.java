@@ -15,6 +15,9 @@ import java.util.concurrent.CompletableFuture;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+/**
+ * Unit tests for {@link NotionProvider} ingestion logic.
+ */
 @ExtendWith(MockitoExtension.class)
 class NotionProviderTest {
 

@@ -12,6 +12,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+/**
+ * Unit tests for {@link IngestionRegistry} provider resolution logic.
+ */
 class IngestionRegistryTest {
 
     private IngestionRegistry registry;

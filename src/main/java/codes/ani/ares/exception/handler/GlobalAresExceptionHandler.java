@@ -15,9 +15,24 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Centralized exception handler for the Ares engine.
+ *
+ * <p>Registered as a {@link RestControllerAdvice} to intercept all exceptions
+ * thrown by REST controllers and produce consistent {@link AresErrorResponse}
+ * payloads with appropriate HTTP status codes and structured error information.</p>
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalAresExceptionHandler {
+
+    /**
+     * Handles {@link UnsupportedProviderException} by returning a 400 Bad Request.
+     *
+     * @param ex      the unsupported provider exception
+     * @param request the current HTTP request
+     * @return a response entity with error code, message, and request path
+     */
     @ExceptionHandler(UnsupportedProviderException.class)
     public ResponseEntity<AresErrorResponse> handleUnsupportedProvider(
             UnsupportedProviderException ex, HttpServletRequest request
@@ -31,6 +46,13 @@ public class GlobalAresExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    /**
+     * Handles generic {@link AresException} business errors by returning a 500 Internal Server Error.
+     *
+     * @param ex      the Ares business exception
+     * @param request the current HTTP request
+     * @return a response entity with error code, message, and request path
+     */
     @ExceptionHandler(AresException.class)
     public ResponseEntity<AresErrorResponse> handleAresException(
             AresException ex, HttpServletRequest request) {
@@ -39,6 +61,14 @@ public class GlobalAresExceptionHandler {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 
+    /**
+     * Handles Jakarta Bean Validation failures by returning a 400 Bad Request
+     * with per-field validation error details.
+     *
+     * @param ex      the validation exception containing field-level errors
+     * @param request the current HTTP request
+     * @return a response entity with validation error details
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<AresErrorResponse> handleValidationExceptions(
             MethodArgumentNotValidException ex, HttpServletRequest request) {
@@ -54,6 +84,13 @@ public class GlobalAresExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    /**
+     * Catch-all handler for any unhandled exception, returning a 500 Internal Server Error.
+     *
+     * @param ex      the unhandled exception
+     * @param request the current HTTP request
+     * @return a response entity with a generic error message
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<AresErrorResponse> handleGenericException(
             Exception ex, HttpServletRequest request) {

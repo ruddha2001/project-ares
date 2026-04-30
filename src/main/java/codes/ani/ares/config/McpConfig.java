@@ -16,6 +16,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Spring configuration that declares MCP client beans for each supported
+ * external provider (Notion, GitHub).
+ *
+ * <p>Each client bean is conditionally created based on the corresponding
+ * {@code ares.mcp.providers.<provider>.enabled} property. The beans use
+ * langchain4j's {@link DefaultMcpClient} with the appropriate transport
+ * layer:</p>
+ * <ul>
+ *   <li><strong>Notion:</strong> {@link StdioMcpTransport} — spawns a local subprocess
+ *       ({@code npx @notionhq/notion-mcp-server}) with the Notion auth token injected
+ *       as an environment variable.</li>
+ *   <li><strong>GitHub:</strong> {@link StreamableHttpMcpTransport} — connects to the
+ *       GitHub Copilot MCP endpoint over HTTP with Bearer token authentication.</li>
+ * </ul>
+ *
+ * <p>In the Spring context, this {@link Configuration} class wires the lower-level
+ * MCP transport and client into beans consumed by the service layer.</p>
+ */
 @Configuration
 public class McpConfig {
 
@@ -25,6 +44,17 @@ public class McpConfig {
         this.environment = environment;
     }
 
+    /**
+     * Creates the Notion MCP client using the STDIO transport.
+     *
+     * <p>Spawns the Notion MCP server as a subprocess and passes the
+     * {@code NOTION_TOKEN} environment variable for authentication. The
+     * server command and arguments are configurable via properties prefixed
+     * with {@code ares.mcp.providers.notion.*}.</p>
+     *
+     * @return a configured {@link McpClient} for Notion
+     * @throws IllegalStateException if the Notion auth token is not set
+     */
     @Bean
     @ConditionalOnProperty(name = "ares.mcp.providers.notion.enabled", havingValue = "true")
     public McpClient notionMcpClient() {
@@ -55,6 +85,16 @@ public class McpConfig {
                 .build();
     }
 
+    /**
+     * Creates the GitHub MCP client using the Streamable HTTP transport.
+     *
+     * <p>Connects to the GitHub Copilot MCP endpoint using Bearer token
+     * authentication. The server URL and auth token are configurable via
+     * properties prefixed with {@code ares.mcp.providers.github.*}.</p>
+     *
+     * @return a configured {@link McpClient} for GitHub
+     * @throws IllegalStateException if the GitHub auth token is not set
+     */
     @Bean
     @ConditionalOnProperty(name = "ares.mcp.providers.github.enabled", havingValue = "true")
     public McpClient githubMcpClient() {

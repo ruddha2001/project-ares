@@ -15,6 +15,18 @@ import java.util.concurrent.CompletableFuture;
 
 import static dev.langchain4j.internal.Json.toJson;
 
+/**
+ * Concrete implementation of {@link NotionMcpClient} that executes MCP tool
+ * requests against the Notion MCP server via the langchain4j MCP client.
+ *
+ * <p>Uses the STDIO transport (configured in {@link codes.ani.ares.config.McpConfig})
+ * to communicate with a local subprocess running the Notion MCP server. Each
+ * invocation is dispatched on the engine's virtual-thread-based
+ * {@link AsyncTaskExecutor} for non-blocking concurrency.</p>
+ *
+ * <p>In the Spring context, this {@link Service} is conditionally activated
+ * when {@code ares.mcp.providers.notion.enabled=true}.</p>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -24,6 +36,14 @@ public class NotionMcpClientImpl implements NotionMcpClient {
     private final McpClient notionMcpClient;
     private final AsyncTaskExecutor aresTaskExecutor;
 
+    /**
+     * Fetches Notion page content by executing the {@code API-get-block-children}
+     * MCP tool with the given page ID as the {@code block_id} argument.
+     *
+     * @param pageId the Notion page UUID to fetch
+     * @return a future that completes with the raw text result from the MCP server
+     * @throws RuntimeException if the MCP tool execution fails or the Notion configuration is missing
+     */
     @Override
     public CompletableFuture<String> fetchPageContent(String pageId) {
 

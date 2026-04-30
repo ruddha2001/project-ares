@@ -15,10 +15,11 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Ingestion provider for GitHub pull request URLs.
+ * Ingestion provider for GitHub URLs.
  *
  * <p>This provider validates GitHub URLs, parses repository and pull request metadata,
- * then fetches pull request content through the GitHub MCP client.</p>
+ * then fetches either repository file listings or pull request content through the GitHub
+ * MCP client.</p>
  */
 @Component
 @ConditionalOnProperty(
@@ -27,7 +28,14 @@ import java.util.concurrent.CompletableFuture;
 )
 @RequiredArgsConstructor
 public class GithubProvider implements IngestionProvider {
+    /**
+     * GitHub MCP client used to fetch repository and pull request content.
+     */
     private final GithubMcpClient mcpClient;
+
+    /**
+     * Parser that extracts the owner, repository, and pull request reference from a URL.
+     */
     private final GithubUrlParser parser;
 
     /**
@@ -64,7 +72,7 @@ public class GithubProvider implements IngestionProvider {
         var ref = parser.parse(sourceUri);
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("extracted_at", Instant.now().toString());
-        metadata.put("provider", "ARES_MCP_V1");
+        metadata.put("provider", "GITHUB_MCP_V1");
         metadata.put("async_status", "SUCCESS");
 
         if (ref.isPullRequest()) {

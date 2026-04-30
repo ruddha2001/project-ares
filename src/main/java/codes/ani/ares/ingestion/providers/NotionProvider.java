@@ -14,6 +14,15 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Ingestion provider that fetches page content from Notion using the MCP client.
+ *
+ * <p>Parses {@code notion://<page-id>} URIs, delegates content retrieval to
+ * {@link NotionMcpClient}, and wraps the result in a {@link SourceData} record
+ * with ingestion metadata. Activated only when the
+ * {@code ares.mcp.providers.notion.enabled} property is {@code true}.</p>
+ *
+ * <p>In the Spring context, this is a conditional {@link Component} injected into
+ * the {@link codes.ani.ares.ingestion.IngestionRegistry} provider list only when
+ * the Notion provider is explicitly enabled.</p>
  */
 @Component
 @ConditionalOnProperty(
