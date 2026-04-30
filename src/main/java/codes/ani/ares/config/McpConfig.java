@@ -2,6 +2,7 @@ package codes.ani.ares.config;
 
 import dev.langchain4j.mcp.client.DefaultMcpClient;
 import dev.langchain4j.mcp.client.McpClient;
+import dev.langchain4j.mcp.client.transport.http.StreamableHttpMcpTransport;
 import dev.langchain4j.mcp.client.transport.stdio.StdioMcpTransport;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.bind.Bindable;
@@ -46,6 +47,26 @@ public class McpConfig {
                 .command(command)
                 .environment(Map.of("NOTION_TOKEN", notionAuthToken))
                 .logEvents(true)
+                .build();
+
+        return new DefaultMcpClient.Builder()
+                .initializationTimeout(Duration.ofMinutes(2))
+                .transport(transport)
+                .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "ares.mcp.providers.github.enabled", havingValue = "true")
+    public McpClient githubMcpClient() {
+        String githubPatToken = environment.getProperty("ares.mcp.providers.github.auth-token");
+        String githubMcpUrl = environment.getProperty("ares.mcp.providers.github.server-url", "https://api.githubcopilot.com/mcp/");
+        if (githubPatToken == null || githubPatToken.isBlank()) {
+            throw new IllegalStateException("Property 'ares.mcp.providers.github.auth-token' must be set when MCP is enabled");
+        }
+
+        var transport = new StreamableHttpMcpTransport.Builder()
+                .url(githubMcpUrl)
+                .customHeaders(Map.of("Authorization", "Bearer " + githubPatToken))
                 .build();
 
         return new DefaultMcpClient.Builder()

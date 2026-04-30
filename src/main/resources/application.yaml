@@ -22,5 +22,5 @@ ares:
         args: [ "-y", "@notionhq/notion-mcp-server" ]
       github:
         enabled: true
-        server-url: "https://api.githubcopilot.com/mcp"
+        server-url: "https://api.githubcopilot.com/mcp/"
         auth-token: ${GITHUB_MCP_TOKEN:}
