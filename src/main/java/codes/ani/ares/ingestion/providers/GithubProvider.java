@@ -83,7 +83,7 @@ public class GithubProvider implements IngestionProvider {
                     ));
         } else {
             metadata.put("is_repository_root", true);
-            return mcpClient.listRepositoryFiles(ref.owner(), ref.repo(), "", true)
+            return mcpClient.getFileContents(ref.owner(), ref.repo(), "")
                     .thenApply(fileListJson -> new SourceData(
                             fileListJson,
                             metadata,
