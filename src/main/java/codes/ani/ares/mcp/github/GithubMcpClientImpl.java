@@ -5,12 +5,12 @@ import codes.ani.ares.mcp.model.McpRequest;
 import codes.ani.ares.mcp.model.McpResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
@@ -18,6 +18,7 @@ import java.util.concurrent.Executors;
 public class GithubMcpClientImpl implements GithubMcpClient {
     private final McpProperties mcpProperties;
     private final RestClient restClient;
+    private final AsyncTaskExecutor aresTaskExecutor;
 
     @Override
     public CompletableFuture<String> pullRequestRead(String prOwner, String prRepo, long prNumber) {
@@ -46,7 +47,7 @@ public class GithubMcpClientImpl implements GithubMcpClient {
                 log.error("Error fetching GitHub PR content for prUri: {}/{}/{} with reason: {}", prOwner, prRepo, prNumber, e.getMessage(), e);
                 throw new RuntimeException(e);
             }
-        }, Executors.newVirtualThreadPerTaskExecutor());
+        }, aresTaskExecutor);
     }
 
     @Override
@@ -80,7 +81,7 @@ public class GithubMcpClientImpl implements GithubMcpClient {
                 log.error("Error listing GitHub repository files for repoUri: {}/{} and path: {} with reason: {}", repoOwner, repo, path, e.getMessage(), e);
                 throw new RuntimeException(e);
             }
-        }, Executors.newVirtualThreadPerTaskExecutor());
+        }, aresTaskExecutor);
     }
 
     @Override
@@ -109,6 +110,6 @@ public class GithubMcpClientImpl implements GithubMcpClient {
                 log.error("Error fetching GitHub file content for repoUri: {}/{} and path: {} with reason: {}", repoOwner, repo, path, e.getMessage(), e);
                 throw new RuntimeException(e);
             }
-        }, Executors.newVirtualThreadPerTaskExecutor());
+        }, aresTaskExecutor);
     }
 }

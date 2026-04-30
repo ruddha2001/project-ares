@@ -7,11 +7,11 @@ import dev.langchain4j.service.tool.ToolExecutionResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
 
 import static dev.langchain4j.internal.Json.toJson;
 
@@ -22,6 +22,7 @@ import static dev.langchain4j.internal.Json.toJson;
 public class NotionMcpClientImpl implements NotionMcpClient {
     private final McpProperties mcpProperties;
     private final McpClient notionMcpClient;
+    private final AsyncTaskExecutor aresTaskExecutor;
 
     @Override
     public CompletableFuture<String> fetchPageContent(String pageId) {
@@ -47,6 +48,6 @@ public class NotionMcpClientImpl implements NotionMcpClient {
                 log.error("Error fetching Notion page content for pageId: {} with reason: {}", pageId, e.getMessage(), e);
                 throw new RuntimeException(e);
             }
-        }, Executors.newVirtualThreadPerTaskExecutor());
+        }, aresTaskExecutor);
     }
 }
