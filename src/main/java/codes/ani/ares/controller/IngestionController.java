@@ -2,9 +2,9 @@ package codes.ani.ares.controller;
 
 import codes.ani.ares.dto.request.IngestionRequest;
 import codes.ani.ares.ingestion.IngestionRegistry;
+import codes.ani.ares.ingestion.WorkspaceService;
 import codes.ani.ares.ingestion.model.SourceData;
 import codes.ani.ares.job.AresJobService;
-import codes.ani.ares.job.model.JobStatus;
 import codes.ani.ares.job.model.JobType;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -33,6 +34,7 @@ import java.util.concurrent.CompletableFuture;
 public class IngestionController {
     private final IngestionRegistry registry;
     private final AresJobService aresJobService;
+    private final WorkspaceService workspaceService;
 
     /**
      * Ingests data from the source URI specified in the request body.
@@ -80,17 +82,26 @@ public class IngestionController {
                 JobType.BASELINE_INGESTION,
                 request.getSourceUri(),
                 (id) -> {
-                    // TODO: Implement actual baseline ingestion logic here, using the request.getSourceUri() to fetch and process data.
                     log.info("Starting background archaeology for job {}", id);
                     try {
-                        for (int i = 1; i <= 5; i++) {
-                            Thread.sleep(2000);
-                            aresJobService.updateProgress(id, i * 0.2);
-                            log.info("Job {}: {}% complete", id, (i * 20));
-                        }
-                        aresJobService.updateStatus(id, JobStatus.COMPLETED);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
+                        Path workspace = workspaceService.initWorkspace(id);
+                        aresJobService.updateProgress(id, 0.1);
+
+                        workspaceService.cloneRepository(id, request.getSourceUri(), workspace);
+                        aresJobService.updateProgress(id, 0.4);
+
+                        // TODO: May Week 1 T2 - The Structural Refinery (Graphify) will go here
+                        aresJobService.addLog(id, "Ready for Structural Analysis (Graphify)...");
+
+                        // For now, we wait and then cleanup
+                        aresJobService.updateStatus(id, codes.ani.ares.job.model.JobStatus.COMPLETED);
+                        aresJobService.updateProgress(id, 1.0);
+                    } catch (Exception e) {
+                        log.error("Job {} failed: {}", id, e.getMessage());
+                        aresJobService.addLog(id, "CRITICAL ERROR: " + e.getMessage());
+                        aresJobService.updateStatus(id, codes.ani.ares.job.model.JobStatus.FAILED);
+                    } finally {
+                        workspaceService.cleanup(id);
                     }
                 });
 
