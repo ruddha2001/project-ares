@@ -1,4 +1,4 @@
-package codes.ani.ares.model;
+package codes.ani.ares.job.model;
 
 /**
  * Represents the lifecycle stages of an ARES background task.
