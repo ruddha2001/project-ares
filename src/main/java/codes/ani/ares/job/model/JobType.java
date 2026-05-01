@@ -1,4 +1,4 @@
-package codes.ani.ares.model;
+package codes.ani.ares.job.model;
 
 /**
  * Defines the category of the background job.
