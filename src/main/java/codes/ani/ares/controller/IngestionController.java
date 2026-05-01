@@ -3,6 +3,9 @@ package codes.ani.ares.controller;
 import codes.ani.ares.dto.request.IngestionRequest;
 import codes.ani.ares.ingestion.IngestionRegistry;
 import codes.ani.ares.ingestion.model.SourceData;
+import codes.ani.ares.job.AresJobService;
+import codes.ani.ares.job.model.JobStatus;
+import codes.ani.ares.job.model.JobType;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -27,6 +32,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class IngestionController {
     private final IngestionRegistry registry;
+    private final AresJobService aresJobService;
 
     /**
      * Ingests data from the source URI specified in the request body.
@@ -53,5 +59,30 @@ public class IngestionController {
                     log.error("Ingestion failed for URI: {}", request.getSourceUri(), ex);
                     return ResponseEntity.status(500).build();
                 });
+    }
+
+    @PostMapping("/baseline")
+    public ResponseEntity<Map<String, UUID>> startBaseline(@RequestBody IngestionRequest request) {
+        log.info("Received baseline request for URI: {}", request.getSourceUri());
+
+        UUID jobId = aresJobService.submitJob(
+                JobType.BASELINE_INGESTION,
+                request.getSourceUri(),
+                (id) -> {
+                    // TODO: Implement actual baseline ingestion logic here, using the request.getSourceUri() to fetch and process data.
+                    log.info("Starting background archaeology for job {}", id);
+                    try {
+                        for (int i = 1; i <= 5; i++) {
+                            Thread.sleep(2000);
+                            aresJobService.updateProgress(id, i * 0.2);
+                            log.info("Job {}: {}% complete", id, (i * 20));
+                        }
+                        aresJobService.updateStatus(id, JobStatus.COMPLETED);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+
+        return ResponseEntity.accepted().body(Map.of("jobId", jobId));
     }
 }
