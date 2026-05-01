@@ -9,6 +9,8 @@ import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -85,6 +87,24 @@ public class AresJobService {
         jobRegistry.findById(jobId).ifPresent(job -> {
             jobRegistry.save(job.toBuilder()
                     .progress(Math.min(1.0, progress))
+                    .updatedAt(Instant.now())
+                    .build());
+        });
+    }
+
+    /**
+     * Appends a timestamped message to the stored log trail for the given job.
+     *
+     * @param jobId  the job identifier
+     * @param message the log message to add
+     */
+    public void addLog(UUID jobId, String message) {
+        jobRegistry.findById(jobId).ifPresent(job -> {
+            List<String> newTrail = new ArrayList<>(job.logTrail() != null ? job.logTrail() : List.of());
+            newTrail.add("[" + Instant.now() + "] " + message);
+
+            jobRegistry.save(job.toBuilder()
+                    .logTrail(List.copyOf(newTrail))
                     .updatedAt(Instant.now())
                     .build());
         });

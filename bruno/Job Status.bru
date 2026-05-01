@@ -1,0 +1,20 @@
+meta {
+  name: Job Status
+  type: http
+  seq: 2
+}
+
+get {
+  url: http://localhost:8080/api/v1/jobs/:jobId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  jobId: c924e55a-4c0e-41db-8f0e-c7e4f77e7ed3
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
