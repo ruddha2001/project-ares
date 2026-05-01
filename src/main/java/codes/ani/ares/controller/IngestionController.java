@@ -45,6 +45,7 @@ public class IngestionController {
      * @return a future that completes with a {@link ResponseEntity} containing the
      * ingested {@link SourceData} on success, or a 500 status on failure
      */
+    @Deprecated
     @PostMapping("/ingest")
     public CompletableFuture<ResponseEntity<SourceData>> ingest(
             @Valid @RequestBody IngestionRequest request
@@ -61,6 +62,16 @@ public class IngestionController {
                 });
     }
 
+    /**
+     * Starts a baseline ingestion job for the provided source URI.
+     *
+     * <p>The request is accepted immediately and the long-running work is
+     * delegated to the job service, which returns a generated job identifier
+     * that can be used to track progress.</p>
+     *
+     * @param request the ingestion request containing the source URI to process
+     * @return an accepted response containing the created job ID
+     */
     @PostMapping("/baseline")
     public ResponseEntity<Map<String, UUID>> startBaseline(@RequestBody IngestionRequest request) {
         log.info("Received baseline request for URI: {}", request.getSourceUri());
