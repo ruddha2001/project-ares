@@ -5,11 +5,18 @@ spring:
     gcp:
       sql:
         enabled: false
-        database-name: "unused"
-        instance-connection-name: "none:none"
+      core:
+        enabled: false
   threads:
     virtual:
       enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
 
 ares:
   mcp:
