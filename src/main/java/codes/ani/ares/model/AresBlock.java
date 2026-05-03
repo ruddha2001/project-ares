@@ -1,26 +1,97 @@
 package codes.ani.ares.model;
 
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * The fundamental unit of 'Truth' in the Ares Vault.
- * Designed for institutional memory and architectural traceability.
+ * JPA entity representing a block of content stored in the Ares system.
+ * <p>
+ * Each instance maps to a row in the "ares_blocks" table. The class uses
+ * Lombok to generate boilerplate (getters/setters, constructors, builder).
  */
-@Builder(toBuilder = true) // Allow immutable updates for status/linking
-public record AresBlock(
-        UUID id,             // Primary identifier in pgvector
-        UUID parentId,       // Connective link (e.g., Requirement -> Code implementation)
-        UUID jobId,          // The specific mission (dig) that created this block
-        AresBlockType type,  // CODE, REQUIREMENT, ARCHITECTURAL_DECISION
-        String content,      // The refined, atomic truth (text or code snippet)
-        String filePath,     // Relative path within the repo (essential for Graphify)
-        String sourceUri,    // The original source (e.g., GitHub Repo URL)
-        String projectId,    // High-level organizational grouping (Sabre Project)
-        String teamId,       // Ownership grouping
-        Map<String, Object> metadata, // Extensible: status (PROPOSED/REJECTED), authors, line numbers
-        String hash          // For rapid delta-syncing detection in future PRs
-) {
+@Entity
+@Table(name = "ares_blocks")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class AresBlock {
+
+    /**
+     * Primary key for the block. Generated automatically as a UUID by JPA.
+     */
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    /**
+     * Optional parent block id for hierarchical/nested blocks.
+     */
+    private UUID parentId;
+
+    /**
+     * The id of the ingestion/job that produced this block.
+     */
+    private UUID jobId;
+
+    /**
+     * The raw textual content of the block. Persisted as a TEXT column to
+     * support large content values.
+     */
+    @Column(columnDefinition = "TEXT")
+    private String content;
+
+    /**
+     * Path to the source file (if applicable) from which this block was
+     * extracted.
+     */
+    private String filePath;
+
+    /**
+     * Logical project identifier this block belongs to.
+     */
+    private String projectId;
+
+    /**
+     * Logical team identifier this block belongs to.
+     */
+    private String teamId;
+
+    /**
+     * A checksum or content hash used for deduplication or quick change
+     * detection.
+     */
+    private String hash;
+
+    /**
+     * The block type (stored as a String in the database). Use
+     * {@link AresBlockType} enum for allowed values.
+     */
+    @Enumerated(EnumType.STRING)
+    private AresBlockType type;
+
+    /**
+     * Arbitrary JSON metadata for the block. Stored using Hibernate's
+     * {@code JdbcTypeCode(SqlTypes.JSON)} so it persists as a JSON/JSONB
+     * column in compatible databases (e.g. PostgreSQL).
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> metadata;
+
+    /**
+     * Dense vector embedding for the block used for semantic search.
+     * Persisted using a database-specific vector column (e.g. Postgres
+     * pgvector) with dimension 1536. The field is represented as a float
+     * array in Java.
+     */
+    @Column(columnDefinition = "vector(1536)")
+    private float[] embedding;
 }

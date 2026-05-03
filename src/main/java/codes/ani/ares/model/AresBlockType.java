@@ -48,5 +48,10 @@ public enum AresBlockType {
     /**
      * Repository manifests, dependency trees, and raw Graphify structural maps[cite: 2].
      */
-    STRUCTURAL_METADATA
+    STRUCTURAL_METADATA,
+
+    /**
+     * Result of the LLM model analysis
+     */
+    AUDIT_RESULT
 }
