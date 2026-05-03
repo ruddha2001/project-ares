@@ -53,5 +53,10 @@ public enum AresBlockType {
     /**
      * Result of the LLM model analysis
      */
-    AUDIT_RESULT
+    AUDIT_RESULT,
+
+    /**
+     * Code block
+     */
+    CODE
 }
