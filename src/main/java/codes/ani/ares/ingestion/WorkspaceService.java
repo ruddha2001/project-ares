@@ -57,6 +57,7 @@ public class WorkspaceService {
      * @throws Exception if the git process fails or is interrupted
      */
     public void cloneRepository(UUID jobId, String targetUri, Path targetPath) throws Exception {
+        log.info("Starting git clone for job {}: URI={}, targetPath={}", jobId, targetUri, targetPath.toAbsolutePath());
         aresJobService.addLog(jobId, "Cloning repository from: " + targetUri);
 
         String token = mcpProperties.getProviders().get("github").getAuthToken();
@@ -103,6 +104,7 @@ public class WorkspaceService {
             try {
                 FileSystemUtils.deleteRecursively(path);
                 aresJobService.addLog(jobId, "Cleaned up workspace at: " + path.toAbsolutePath());
+                log.info("Workspace cleaned up for job {}: {}", jobId, path.toAbsolutePath());
             } catch (IOException e) {
                 aresJobService.addLog(jobId, "Failed to cleanup workspace: " + e.getMessage());
                 log.error("Error cleaning up workspace for job {}: {}", jobId, e.getMessage(), e);

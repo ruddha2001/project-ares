@@ -2,6 +2,7 @@ package codes.ani.ares.dto.request;
 
 import codes.ani.ares.validation.SupportedAresUri;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
@@ -25,4 +26,8 @@ public class IngestionRequest {
     @NotBlank(message = "Source URI cannot be empty")
     @SupportedAresUri
     private String sourceUri;
+
+    @NotNull(message = "Project ID cannot be null")
+    @NotBlank(message = "Project ID cannot be empty")
+    private String projectId;
 }
