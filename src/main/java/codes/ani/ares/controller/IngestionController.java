@@ -1,6 +1,7 @@
 package codes.ani.ares.controller;
 
 import codes.ani.ares.dto.request.IngestionRequest;
+import codes.ani.ares.ingestion.GraphifyRefinery;
 import codes.ani.ares.ingestion.IngestionRegistry;
 import codes.ani.ares.ingestion.WorkspaceService;
 import codes.ani.ares.ingestion.model.SourceData;
@@ -35,6 +36,7 @@ public class IngestionController {
     private final IngestionRegistry registry;
     private final AresJobService aresJobService;
     private final WorkspaceService workspaceService;
+    private final GraphifyRefinery graphifyRefinery;
 
     /**
      * Ingests data from the source URI specified in the request body.
@@ -75,7 +77,7 @@ public class IngestionController {
      * @return an accepted response containing the created job ID
      */
     @PostMapping("/baseline")
-    public ResponseEntity<Map<String, UUID>> startBaseline(@RequestBody IngestionRequest request) {
+    public ResponseEntity<Map<String, UUID>> startBaseline(@Valid @RequestBody IngestionRequest request) {
         log.info("Received baseline request for URI: {}", request.getSourceUri());
 
         UUID jobId = aresJobService.submitJob(
@@ -90,12 +92,11 @@ public class IngestionController {
                         workspaceService.cloneRepository(id, request.getSourceUri(), workspace);
                         aresJobService.updateProgress(id, 0.4);
 
-                        // TODO: May Week 1 T2 - The Structural Refinery (Graphify) will go here
-                        aresJobService.addLog(id, "Ready for Structural Analysis (Graphify)...");
+                        graphifyRefinery.refine(id, workspace, request.getProjectId());
 
-                        // For now, we wait and then cleanup
                         aresJobService.updateStatus(id, codes.ani.ares.job.model.JobStatus.COMPLETED);
                         aresJobService.updateProgress(id, 1.0);
+                        log.info("Baseline ingestion completed successfully for job {}", id);
                     } catch (Exception e) {
                         log.error("Job {} failed: {}", id, e.getMessage());
                         aresJobService.addLog(id, "CRITICAL ERROR: " + e.getMessage());
