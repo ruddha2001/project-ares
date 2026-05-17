@@ -70,12 +70,10 @@ public class AresJobService {
      * @param status the new job status
      */
     public void updateStatus(UUID jobId, JobStatus status) {
-        aresJobRepository.findById(jobId).ifPresent(job -> {
-            aresJobRepository.save(job.toBuilder()
-                    .status(status)
-                    .updatedAt(Instant.now())
-                    .build());
-        });
+        aresJobRepository.findById(jobId).ifPresent(job -> aresJobRepository.save(job.toBuilder()
+                .status(status)
+                .updatedAt(Instant.now())
+                .build()));
     }
 
     /**
@@ -85,12 +83,10 @@ public class AresJobService {
      * @param progress the new progress value, capped at 1.0
      */
     public void updateProgress(UUID jobId, double progress) {
-        aresJobRepository.findById(jobId).ifPresent(job -> {
-            aresJobRepository.save(job.toBuilder()
-                    .progress(Math.min(1.0, progress))
-                    .updatedAt(Instant.now())
-                    .build());
-        });
+        aresJobRepository.findById(jobId).ifPresent(job -> aresJobRepository.save(job.toBuilder()
+                .progress(Math.min(1.0, progress))
+                .updatedAt(Instant.now())
+                .build()));
     }
 
     /**
@@ -118,12 +114,10 @@ public class AresJobService {
      * @param error the failure message to persist
      */
     private void failJob(UUID jobId, String error) {
-        aresJobRepository.findById(jobId).ifPresent(job -> {
-            aresJobRepository.save(job.toBuilder()
-                    .status(JobStatus.FAILED)
-                    .errorMessage(error)
-                    .updatedAt(Instant.now())
-                    .build());
-        });
+        aresJobRepository.findById(jobId).ifPresent(job -> aresJobRepository.save(job.toBuilder()
+                .status(JobStatus.FAILED)
+                .errorMessage(error)
+                .updatedAt(Instant.now())
+                .build()));
     }
 }
