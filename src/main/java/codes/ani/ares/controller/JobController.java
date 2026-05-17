@@ -1,7 +1,7 @@
 package codes.ani.ares.controller;
 
-import codes.ani.ares.job.JobRegistry;
 import codes.ani.ares.job.model.AresJob;
+import codes.ani.ares.repository.AresJobRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,7 +22,7 @@ public class JobController {
     /**
      * Registry for managing and retrieving jobs.
      */
-    private final JobRegistry jobRegistry;
+    private final AresJobRepository aresJobRepository;
 
     /**
      * Retrieves the status of a job by its ID.
@@ -32,7 +32,7 @@ public class JobController {
      */
     @GetMapping("/{jobId}")
     public ResponseEntity<AresJob> getJobStatus(@PathVariable UUID jobId) {
-        return jobRegistry.findById(jobId)
+        return aresJobRepository.findById(jobId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
