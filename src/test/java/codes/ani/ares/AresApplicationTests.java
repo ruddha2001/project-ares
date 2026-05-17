@@ -1,6 +1,7 @@
 package codes.ani.ares;
 
 import codes.ani.ares.repository.AresBlockRepository;
+import codes.ani.ares.repository.AresJobRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -19,6 +20,9 @@ class AresApplicationTests {
 
     @MockitoBean
     private AresBlockRepository aresBlockRepository;
+
+    @MockitoBean
+    private AresJobRepository aresJobRepository;
 
     /**
      * Context loading smoke test.
