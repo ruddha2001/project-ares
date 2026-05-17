@@ -3,6 +3,7 @@ package codes.ani.ares.job;
 import codes.ani.ares.job.model.AresJob;
 import codes.ani.ares.job.model.JobStatus;
 import codes.ani.ares.job.model.JobType;
+import codes.ani.ares.repository.AresJobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.AsyncTaskExecutor;
@@ -21,7 +22,7 @@ import java.util.function.Consumer;
 @Service
 @RequiredArgsConstructor
 public class AresJobService {
-    private final JobRegistry jobRegistry;
+    private final AresJobRepository aresJobRepository;
 
     private final AsyncTaskExecutor aresTaskExecutor;
 
@@ -46,7 +47,7 @@ public class AresJobService {
                 .updatedAt(Instant.now())
                 .build();
 
-        jobRegistry.save(job);
+        aresJobRepository.save(job);
         log.info("Job {} (Type: {}) launched for URI: {}", jobId, type, targetUri);
 
         aresTaskExecutor.execute(() -> {
@@ -69,8 +70,8 @@ public class AresJobService {
      * @param status the new job status
      */
     public void updateStatus(UUID jobId, JobStatus status) {
-        jobRegistry.findById(jobId).ifPresent(job -> {
-            jobRegistry.save(job.toBuilder()
+        aresJobRepository.findById(jobId).ifPresent(job -> {
+            aresJobRepository.save(job.toBuilder()
                     .status(status)
                     .updatedAt(Instant.now())
                     .build());
@@ -84,8 +85,8 @@ public class AresJobService {
      * @param progress the new progress value, capped at 1.0
      */
     public void updateProgress(UUID jobId, double progress) {
-        jobRegistry.findById(jobId).ifPresent(job -> {
-            jobRegistry.save(job.toBuilder()
+        aresJobRepository.findById(jobId).ifPresent(job -> {
+            aresJobRepository.save(job.toBuilder()
                     .progress(Math.min(1.0, progress))
                     .updatedAt(Instant.now())
                     .build());
@@ -95,15 +96,15 @@ public class AresJobService {
     /**
      * Appends a timestamped message to the stored log trail for the given job.
      *
-     * @param jobId  the job identifier
+     * @param jobId   the job identifier
      * @param message the log message to add
      */
     public void addLog(UUID jobId, String message) {
-        jobRegistry.findById(jobId).ifPresent(job -> {
-            List<String> newTrail = new ArrayList<>(job.logTrail() != null ? job.logTrail() : List.of());
+        aresJobRepository.findById(jobId).ifPresent(job -> {
+            List<String> newTrail = new ArrayList<>(job.getLogTrail() != null ? job.getLogTrail() : List.of());
             newTrail.add("[" + Instant.now() + "] " + message);
 
-            jobRegistry.save(job.toBuilder()
+            aresJobRepository.save(job.toBuilder()
                     .logTrail(List.copyOf(newTrail))
                     .updatedAt(Instant.now())
                     .build());
@@ -117,8 +118,8 @@ public class AresJobService {
      * @param error the failure message to persist
      */
     private void failJob(UUID jobId, String error) {
-        jobRegistry.findById(jobId).ifPresent(job -> {
-            jobRegistry.save(job.toBuilder()
+        aresJobRepository.findById(jobId).ifPresent(job -> {
+            aresJobRepository.save(job.toBuilder()
                     .status(JobStatus.FAILED)
                     .errorMessage(error)
                     .updatedAt(Instant.now())
