@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  ares-db:
+    image: pgvector/pgvector:pg16
+    container_name: ares-postgres-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ares}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - ares_postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - ares-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME:-ares}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  ares-network:
+    driver: bridge
+
+volumes:
+  ares_postgres_data:
+    driver: local
