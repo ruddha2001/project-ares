@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","method":"tools/call","params":{"name":"ares_verification","arguments":{"gitDiff":"--- a/UserService.java\n+++ b/UserService.java\n+ Thread t = new Thread();"}},"id":1}

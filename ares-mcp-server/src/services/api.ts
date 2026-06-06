@@ -18,23 +18,47 @@ export async function executeAresJobFlow(
       );
     }
 
-    const initResponse = await fetch(`${BACKEND_URL}/api/v1/jobs/${endpoint}`, {
+    const initResponse = await fetch(`${BACKEND_URL}/api/v1/jobs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        projectId: payload.projectId,
+        taskDescription: payload.taskDescription || null,
+        gitDiff: payload.gitDiff || null,
+      }),
     });
 
     if (!initResponse.ok) {
       throw new Error(
-        `Backend rejected job initialization: ${initResponse.statusText}`,
+        `Backend rejected job initialization: ${await initResponse.text()}`,
       );
     }
 
     let jobState = (await initResponse.json()) as JobResponse;
     const jobId = jobState.jobId;
 
-    console.log(
+    console.error(
       `[ARES-LOG] Job [${jobId}] securely initialized. Entering telemetry polling track...`,
+    );
+
+    const triggerResponse = await fetch(
+      `${BACKEND_URL}/api/v1/jobs/${jobId}/${endpoint}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Length': '0',
+        },
+      },
+    );
+
+    if (triggerResponse.status !== 202) {
+      throw new Error(
+        `Engine rejected processing trigger request for Job ID: ${jobId}`,
+      );
+    }
+
+    console.error(
+      `[ARES-LOG] Processing triggered asynchronously. Engaging telemetry tracker...`,
     );
 
     while (jobState.status !== 'COMPLETED' && jobState.status !== 'FAILED') {
@@ -42,9 +66,7 @@ export async function executeAresJobFlow(
 
       const pollResponse = await fetch(`${BACKEND_URL}/api/v1/jobs/${jobId}`);
       if (!pollResponse.ok) {
-        throw new Error(
-          `Lost track of active job pipeline state for ID: ${jobId}`,
-        );
+        throw new Error(`Lost track of cluster state matrix for ID: ${jobId}`);
       }
 
       jobState = (await pollResponse.json()) as JobResponse;
@@ -69,8 +91,7 @@ export async function executeAresJobFlow(
       content: [
         {
           type: 'text',
-          text:
-            jobState.payload || '🚀 Job finalized with empty payload results.',
+          text: jobState.payload || '🚀 Processing complete.',
         },
       ],
     } as CallToolResult;
