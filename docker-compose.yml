@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
-  ares-db:
+  postgres-cluster:
     image: pgvector/pgvector:pg16
     container_name: ares-postgres-db
+    restart: always
     environment:
       POSTGRES_DB: ${DB_NAME:-ares}
       POSTGRES_USER: ${DB_USER}
@@ -14,17 +13,74 @@ services:
       - ares_postgres_data:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d
     networks:
-      - ares-network
+      - ares-internal-network
+    profiles:
+      - local-db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME:-ares}"]
+      test: ["CMD-SHELL", "pg_isready -U $${DB_USER} -d $${DB_NAME:-ares}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  inference-sidecar:
+    image: ollama/ollama:0.3.14
+    container_name: ares_inference_sidecar
+    restart: always
+    volumes:
+      - ollama_storage:/root/.ollama
+    entrypoint: [ "/usr/bin/bash", "-c" ]
+    command: |
+      "ollama serve & 
+       sleep 5; 
+       echo '🚀 [ARES-INFRA] Pre-warming embedding weights...'; 
+       ollama pull nomic-embed-text; 
+       echo '🏆 [ARES-INFRA] Model pinned to VRAM. Standby ready.'; 
+       wait"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${ARES_GPU_COUNT:-1}
+              capabilities: [gpu]
+    networks:
+      - ares-internal-network
+
+  ares-backend:
+    build: ./ares-backend
+    container_name: ares_backend_service
+    restart: always
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_HOST:-postgres-cluster}:${DB_PORT:-5432}/${DB_NAME:-ares}
+      - SPRING_DATASOURCE_USERNAME=${DB_USER}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
+      - COCOINDEX_WORKER_URL=http://${COCOINDEX_HOST:-ares-cocoindex-worker}:8000
+    ports:
+      - "8080:8080"
+    networks:
+      - ares-internal-network
+
+  ares-cocoindex-worker:
+    build: ./ares-cocoindex
+    container_name: ares_cocoindex_worker
+    restart: always
+    environment:
+      - DB_HOST=${DB_HOST:-postgres-cluster}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-ares}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - INFERENCE_URL=${INFERENCE_URL}
+      - COCOINDEX_DATABASE_URL=${COCOINDEX_DATABASE_URL}
+    ports:
+      - "8000:8000"
+    networks:
+      - ares-internal-network
+
 networks:
-  ares-network:
+  ares-internal-network:
     driver: bridge
 
 volumes:
   ares_postgres_data:
-    driver: local
+  ollama_storage:
