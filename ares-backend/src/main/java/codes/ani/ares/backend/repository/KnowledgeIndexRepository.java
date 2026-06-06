@@ -11,15 +11,14 @@ import java.util.UUID;
 
 @Repository
 public interface KnowledgeIndexRepository extends JpaRepository<KnowledgeIndex, UUID> {
-    @Query(value = """
-            SELECT * FROM ares_knowledge_indices\s
-            WHERE project_id = :projectId\s
-            ORDER BY embedding <=> cast(:queryEmbedding as vector)\s
-            LIMIT :maxResults
-            """, nativeQuery = true)
-    List<KnowledgeIndex> findNearestBlocksByProject(
-            @Param("projectId") UUID projectId,
-            @Param("queryEmbedding") float[] queryEmbedding,
-            @Param("maxResults") int maxResults
-    );
+        @Query(value = """
+                        SELECT * FROM ares_knowledge_indices
+                        WHERE project_id = :projectId
+                        ORDER BY embedding <=> cast(:queryEmbedding as vector)
+                        LIMIT :maxResults
+                        """, nativeQuery = true)
+        List<KnowledgeIndex> findNearestBlocksByProject(
+                        @Param("projectId") UUID projectId,
+                        @Param("queryEmbedding") float[] queryEmbedding,
+                        @Param("maxResults") int maxResults);
 }
