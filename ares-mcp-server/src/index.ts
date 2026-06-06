@@ -5,8 +5,6 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { handleVerification } from './tools/verification';
 
-const BACKEND_URL = process.env.ARES_BACKEND_URL;
-
 const server = new McpServer({
   name: 'ares-mcp-server',
   version: packageJson.version,
@@ -37,7 +35,7 @@ server.registerTool(
 async function run() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.log(
+  console.error(
     '[ARES-LOG] Modular Bun MCP Sidecar securely bonded over processes.',
   );
 }
