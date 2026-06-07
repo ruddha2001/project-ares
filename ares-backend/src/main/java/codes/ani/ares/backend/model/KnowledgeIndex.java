@@ -31,7 +31,7 @@ public class KnowledgeIndex {
     @Column(name = "block_content", nullable = false, columnDefinition = "TEXT")
     private String blockContent;
 
-    @Column(name = "embedding", nullable = false, columnDefinition = "vector(1536)")
+    @Column(name = "embedding", nullable = false, columnDefinition = "vector(768)")
     private float[] embedding;
 
     @Column(name = "created_at", updatable = false, nullable = false)
