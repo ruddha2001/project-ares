@@ -1,6 +1,7 @@
 package codes.ani.ares.backend.model;
 
 import jakarta.persistence.*;
+import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -9,6 +10,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "ares_knowledge_indices")
 @Data
+@Builder
 public class KnowledgeIndex {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -31,7 +33,7 @@ public class KnowledgeIndex {
     @Column(name = "block_content", nullable = false, columnDefinition = "TEXT")
     private String blockContent;
 
-    @Column(name = "embedding", nullable = false, columnDefinition = "vector(1536)")
+    @Column(name = "embedding", nullable = false, columnDefinition = "vector(768)")
     private float[] embedding;
 
     @Column(name = "created_at", updatable = false, nullable = false)

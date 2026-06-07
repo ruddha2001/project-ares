@@ -60,9 +60,9 @@ services:
     networks:
       - ares-internal-network
 
-  ares-cocoindex-worker:
-    build: ./ares-cocoindex
-    container_name: ares_cocoindex_worker
+  ares-inference-worker:
+    build: ./ares-inference
+    container_name: ares_inference_worker
     restart: always
     environment:
       - DB_HOST=${DB_HOST:-postgres-cluster}
@@ -74,8 +74,8 @@ services:
       - COCOINDEX_DATABASE_URL=${COCOINDEX_DATABASE_URL}
     ports:
       - "8000:8000"
-    networks:
-      - ares-internal-network
+    volumes:
+      - ./ares-inference-worker:/app
 
 networks:
   ares-internal-network:
@@ -83,4 +83,5 @@ networks:
 
 volumes:
   ares_postgres_data:
+  ares-inference-worker:
   ollama_storage:

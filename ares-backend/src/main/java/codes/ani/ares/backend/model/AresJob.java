@@ -1,6 +1,7 @@
 package codes.ani.ares.backend.model;
 
 import jakarta.persistence.*;
+import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -9,6 +10,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "ares_jobs")
 @Data
+@Builder
 public class AresJob {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -32,6 +34,9 @@ public class AresJob {
 
     @Column(name = "git_diff", columnDefinition = "TEXT")
     private String gitDiff;
+
+    @Column(name = "doc_url")
+    private String docUrl;
 
     @Column(name = "context_blocks", columnDefinition = "TEXT")
     private String contextBlocks;
