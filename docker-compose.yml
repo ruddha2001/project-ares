@@ -1,12 +1,13 @@
 services:
   postgres-cluster:
     image: pgvector/pgvector:pg16
-    container_name: ares-postgres-db
+    container_name: ares_postgres_db
     restart: always
     environment:
       POSTGRES_DB: ${DB_NAME:-ares}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+      ARES_ROOT_ADMINS: ${ARES_ROOT_ADMINS}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
@@ -60,8 +61,8 @@ services:
     networks:
       - ares-internal-network
 
-  ares-inference-worker:
-    build: ./ares-inference
+  ares-worker:
+    build: ./ares-worker
     container_name: ares_inference_worker
     restart: always
     environment:
@@ -74,8 +75,6 @@ services:
       - COCOINDEX_DATABASE_URL=${COCOINDEX_DATABASE_URL}
     ports:
       - "8000:8000"
-    volumes:
-      - ./ares-inference-worker:/app
 
 networks:
   ares-internal-network:
@@ -83,5 +82,4 @@ networks:
 
 volumes:
   ares_postgres_data:
-  ares-inference-worker:
   ollama_storage:
