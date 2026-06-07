@@ -2,11 +2,14 @@ package codes.ani.ares.backend.controller;
 
 import codes.ani.ares.backend.dto.ManualDocIngestionDTO;
 import codes.ani.ares.backend.dto.ProjectRegistrationDTO;
+import codes.ani.ares.backend.dto.UserOnboardingDTO;
 import codes.ani.ares.backend.model.AresJob;
 import codes.ani.ares.backend.model.JobStatus;
 import codes.ani.ares.backend.model.Project;
+import codes.ani.ares.backend.model.User;
 import codes.ani.ares.backend.repository.AresJobRepository;
 import codes.ani.ares.backend.repository.ProjectRepository;
+import codes.ani.ares.backend.repository.UserRepository;
 import codes.ani.ares.backend.service.IngestionWebhookService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,23 @@ public class BaselineController {
     private final ProjectRepository projectRepository;
     private final IngestionWebhookService ingestionWebhookService;
     private final AresJobRepository jobRepository;
+    private final UserRepository userRepository;
+
+    @PostMapping("/addUser")
+    public ResponseEntity<?> onboardUser(@Valid @RequestBody UserOnboardingDTO onboardingDTO) {
+        if (userRepository.findByGithubUsernameIgnoreCase(onboardingDTO.githubUsername()).isPresent()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "User identity already registered inside current workspace context."));
+        }
+
+        User newUser = User.builder()
+                .githubUsername(onboardingDTO.githubUsername())
+                .isAdmin(onboardingDTO.isAdmin())
+                .build();
+
+        User savedUser = userRepository.save(newUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedUser);
+    }
 
     @PostMapping("/project")
     public ResponseEntity<Map<String, String>> registerProject(@Valid @RequestBody ProjectRegistrationDTO projectDTO){
