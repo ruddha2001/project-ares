@@ -1,6 +1,7 @@
 package codes.ani.ares.backend.model;
 
 import jakarta.persistence.*;
+import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -9,6 +10,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "ares_jobs")
 @Data
+@Builder
 public class AresJob {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
