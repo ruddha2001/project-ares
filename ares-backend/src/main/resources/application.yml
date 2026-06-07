@@ -23,3 +23,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+ares:
+  inference-worker:
+    url: ${INFERENCE_WORKER_URL:http://ares-inference-worker:8000}

@@ -35,6 +35,9 @@ public class AresJob {
     @Column(name = "git_diff", columnDefinition = "TEXT")
     private String gitDiff;
 
+    @Column(name = "doc_url")
+    private String docUrl;
+
     @Column(name = "context_blocks", columnDefinition = "TEXT")
     private String contextBlocks;
 
