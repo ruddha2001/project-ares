@@ -1,6 +1,10 @@
 FROM python:3.12-slim
 RUN apt-get update && apt-get install -y \
     git \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g @github/copilot@1.0.61 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -8,11 +12,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-WORKDIR /app/workspace
-RUN cocoindex init
-
-WORKDIR /app
-COPY app.py codebase.py document.py ./
+COPY app.py codebase.py document.py connectors.py embeddings.py ./
 
 RUN useradd -u 8888 aresuser && chown -R aresuser:aresuser /app
 USER aresuser

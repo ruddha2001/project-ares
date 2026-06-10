@@ -14,6 +14,8 @@ public record ManualDocIngestionDTO(
         SourceOrigin sourceOrigin,
 
         @NotBlank(message = "Source reference URL is required")
-        String sourceUrl
+        String sourceUrl,
+
+        String notionToken
 ) {
 }

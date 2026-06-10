@@ -18,9 +18,16 @@ export async function executeAresJobFlow(
       );
     }
 
+    const token = process.env.COPILOT_GITHUB_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_TOKEN || '';
+    const copilotModel = process.env.COPILOT_MODEL || '';
+
     const initResponse = await fetch(`${BACKEND_URL}/api/v1/jobs`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-ARES-GH-PAT': token,
+        ...(copilotModel ? { 'X-ARES-COPILOT-MODEL': copilotModel } : {}),
+      },
       body: JSON.stringify({
         projectId: payload.projectId,
         taskDescription: payload.taskDescription || null,
@@ -47,6 +54,8 @@ export async function executeAresJobFlow(
         method: 'POST',
         headers: {
           'Content-Length': '0',
+          'X-ARES-GH-PAT': token,
+          ...(copilotModel ? { 'X-ARES-COPILOT-MODEL': copilotModel } : {}),
         },
       },
     );
@@ -64,7 +73,12 @@ export async function executeAresJobFlow(
     while (jobState.status !== 'COMPLETED' && jobState.status !== 'FAILED') {
       await Bun.sleep(POLLING_INTERVAL_MS);
 
-      const pollResponse = await fetch(`${BACKEND_URL}/api/v1/jobs/${jobId}`);
+      const pollResponse = await fetch(`${BACKEND_URL}/api/v1/jobs/${jobId}`, {
+        headers: {
+          'X-ARES-GH-PAT': token,
+          ...(copilotModel ? { 'X-ARES-COPILOT-MODEL': copilotModel } : {}),
+        },
+      });
       if (!pollResponse.ok) {
         throw new Error(`Lost track of cluster state matrix for ID: ${jobId}`);
       }
