@@ -27,6 +27,8 @@ services:
     image: ollama/ollama:0.3.14
     container_name: ares_inference_sidecar
     restart: always
+    ports:
+      - "11434:11434"
     volumes:
       - ollama_storage:/root/.ollama
     entrypoint: [ "/usr/bin/bash", "-c" ]
@@ -55,7 +57,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://${DB_HOST:-postgres-cluster}:${DB_PORT:-5432}/${DB_NAME:-ares}
       - SPRING_DATASOURCE_USERNAME=${DB_USER}
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
-      - COCOINDEX_WORKER_URL=http://${COCOINDEX_HOST:-ares-cocoindex-worker}:8000
+      - INFERENCE_WORKER_URL=http://ares-worker:8000
     ports:
       - "8080:8080"
     networks:
@@ -65,6 +67,7 @@ services:
     build: ./ares-worker
     container_name: ares_inference_worker
     restart: always
+    user: "${CURRENT_UID:-1000}:${CURRENT_GID:-1000}"
     environment:
       - DB_HOST=${DB_HOST:-postgres-cluster}
       - DB_PORT=${DB_PORT:-5432}
@@ -72,9 +75,12 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - INFERENCE_URL=${INFERENCE_URL}
-      - COCOINDEX_DATABASE_URL=${COCOINDEX_DATABASE_URL}
+      - COPILOT_MODEL=${COPILOT_MODEL}
     ports:
       - "8000:8000"
+    networks:
+      - ares-internal-network
+
 
 networks:
   ares-internal-network:
