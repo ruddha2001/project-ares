@@ -15,10 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
@@ -48,7 +45,10 @@ public class BaselineController {
     }
 
     @PostMapping("/project")
-    public ResponseEntity<Map<String, String>> registerProject(@Valid @RequestBody ProjectRegistrationDTO projectDTO){
+    public ResponseEntity<Map<String, String>> registerProject(
+            @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
+            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel,
+            @Valid @RequestBody ProjectRegistrationDTO projectDTO){
         Project project = Project.builder()
                 .name(projectDTO.name())
                 .repoUrl(projectDTO.repoUrl())
@@ -64,7 +64,7 @@ public class BaselineController {
                 .build();
         AresJob savedJob = jobRepository.save(job);
 
-        ingestionWebhookService.triggerCodebaseIngestion(savedJob.getJobId(), savedProject);
+        ingestionWebhookService.triggerCodebaseIngestion(savedJob.getJobId(), savedProject, githubToken, copilotModel);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "status", savedJob.getStatus().toString(),
@@ -74,12 +74,18 @@ public class BaselineController {
     }
 
     @PostMapping("/doc")
-    public ResponseEntity<Map<String, String>> injectDocument(@Valid @RequestBody ManualDocIngestionDTO docDTO) {
+    public ResponseEntity<Map<String, String>> injectDocument(
+            @RequestHeader(value = "X-ARES-NOTION-TOKEN", required = false) String notionHeaderToken,
+            @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
+            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel,
+            @Valid @RequestBody ManualDocIngestionDTO docDTO) {
         if (!projectRepository.existsById(docDTO.projectId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
                     "error", "Target project ID " + docDTO.projectId() + " does not exist."
             ));
         }
+
+        String effectiveToken = (notionHeaderToken != null) ? notionHeaderToken : docDTO.notionToken();
 
         AresJob job = AresJob.builder()
                 .projectId(docDTO.projectId())
@@ -89,7 +95,7 @@ public class BaselineController {
                 .build();
         AresJob savedJob = jobRepository.save(job);
 
-        ingestionWebhookService.triggerDocumentIngestion(savedJob.getJobId(), docDTO);
+        ingestionWebhookService.triggerDocumentIngestion(savedJob.getJobId(), docDTO, effectiveToken, githubToken, copilotModel);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "status", savedJob.getStatus().toString(),
