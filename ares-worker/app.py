@@ -1,7 +1,7 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
-import uuid
 import logging
+from typing import Optional
 
 from codebase import execute_codebase_gauntlet
 from document import execute_document_gauntlet
@@ -15,6 +15,8 @@ class CodebasePayload(BaseModel):
     project_id: str
     repo_url: str
     default_branch: str
+    github_token: Optional[str] = None
+    copilot_model: Optional[str] = None
 
 
 class DocumentPayload(BaseModel):
@@ -22,6 +24,9 @@ class DocumentPayload(BaseModel):
     project_id: str
     source_origin: str
     source_url: str
+    document_token: Optional[str] = None
+    github_token: Optional[str] = None
+    copilot_model: Optional[str] = None
 
 
 @app.post("/api/v1/etl/codebase", status_code=202)
@@ -39,6 +44,8 @@ def trigger_codebase_ingestion(
         payload.project_id,
         payload.repo_url,
         payload.default_branch,
+        payload.github_token,
+        payload.copilot_model,
     )
 
     return {"status": "PROCESSING", "job_id": payload.job_id}
@@ -59,6 +66,9 @@ def trigger_document_ingestion(
         payload.project_id,
         payload.source_origin,
         payload.source_url,
+        payload.document_token,
+        payload.github_token,
+        payload.copilot_model,
     )
 
     return {"status": "PROCESSING", "job_id": payload.job_id}
