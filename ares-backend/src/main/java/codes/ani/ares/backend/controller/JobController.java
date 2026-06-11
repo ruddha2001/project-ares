@@ -3,6 +3,7 @@ package codes.ani.ares.backend.controller;
 import codes.ani.ares.backend.model.AresJob;
 import codes.ani.ares.backend.model.JobStatus;
 import codes.ani.ares.backend.repository.AresJobRepository;
+import codes.ani.ares.backend.repository.ProjectRepository;
 import codes.ani.ares.backend.service.PlanningOrchestrationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,15 +21,20 @@ import java.util.UUID;
 public class JobController {
 
     private final AresJobRepository jobRepository;
+    private final ProjectRepository projectRepository;
     private final PlanningOrchestrationService planningOrchestrationService;
 
     @PostMapping
     public ResponseEntity<AresJob> createJob(@RequestBody AresJob jobInitialArgs) {
-        jobInitialArgs.setStatus(JobStatus.INITIALIZED);
-        jobInitialArgs.setCurrentTask("Workspace anchor established");
+        return projectRepository.getByRepoUrl(jobInitialArgs.getRepoUrl()).map(project -> {
+            jobInitialArgs.setStatus(JobStatus.INITIALIZED);
+            jobInitialArgs.setCurrentTask("Workspace anchor established");
 
-        AresJob saved = jobRepository.save(jobInitialArgs);
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            jobInitialArgs.setProjectId(project.getId());
+            AresJob saved = jobRepository.save(jobInitialArgs);
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{jobId}")
@@ -51,32 +57,26 @@ public class JobController {
 
         Thread.startVirtualThread(() -> {
             try {
-                // Update Step A: Vector Extraction State
-                updateJobState(jobId, JobStatus.PROCESSING, "EXTRACTING_PROMPT_VECTOR", null);
-
-                // Update Step B: Data Retrieval
                 updateJobState(jobId, JobStatus.PROCESSING, "RETRIEVING_DATA", null);
-                
+
                 UUID projectId = job.getProjectId();
                 String featurePrompt = job.getTaskDescription();
-                
+
                 Map<String, Object> context = planningOrchestrationService.executePlanning(
                         projectId, featurePrompt, githubToken, copilotModel);
                 String contextPayload = (String) context.get("contextPayload");
 
-                // Update Step C: Planning Processing State
                 updateJobState(jobId, JobStatus.PROCESSING, "LIBRARIAN_PLANNING", null);
 
                 String prompt = String.format("""
                         You are Antigravity, a premium agentic AI coding assistant.
                         Based on the following requirement and context, generate a detailed implementation plan.
                         Use clear markdown formatting, list modified/new files, and outline the steps clearly.
-                        
+
                         %s
                         """, contextPayload);
                 String plan = planningOrchestrationService.generateText(prompt, githubToken, copilotModel);
 
-                // Update Step D: Completion
                 updateJobState(jobId, JobStatus.COMPLETED, "PLANNING_COMPLETE", plan);
                 log.info("Librarian planning track finalized for job: {}", jobId);
 
@@ -109,10 +109,10 @@ public class JobController {
 
                 // Update Step B: Data Retrieval
                 updateJobState(jobId, JobStatus.PROCESSING, "RETRIEVING_POLICIES", null);
-                
+
                 UUID projectId = job.getProjectId();
                 String gitDiff = job.getGitDiff();
-                
+
                 Map<String, Object> context = planningOrchestrationService.executeVerification(
                         projectId, gitDiff, githubToken, copilotModel);
                 String contextPayload = (String) context.get("contextPayload");
@@ -120,19 +120,22 @@ public class JobController {
                 // Update Step C: Compliance Review State
                 updateJobState(jobId, JobStatus.PROCESSING, "COMPLIANCE_REVIEW", null);
 
-                String prompt = String.format("""
-                        You are Antigravity, a premium compliance agent.
-                        Verify if the following git diff aligns with the codebase reference context and specification/compliance policies.
-                        
-                        === GIT DIFF ===
-                        %s
-                        
-                        === CONTEXT & POLICIES ===
-                        %s
-                        
-                        Please perform a code review, check for compliance, and state whether the changes are approved or if there are any issues.
-                        """, gitDiff, contextPayload);
-                String verificationResult = planningOrchestrationService.generateText(prompt, githubToken, copilotModel);
+                String prompt = String.format(
+                        """
+                                You are Antigravity, a premium compliance agent.
+                                Verify if the following git diff aligns with the codebase reference context and specification/compliance policies.
+
+                                === GIT DIFF ===
+                                %s
+
+                                === CONTEXT & POLICIES ===
+                                %s
+
+                                Please perform a code review, check for compliance, and state whether the changes are approved or if there are any issues.
+                                """,
+                        gitDiff, contextPayload);
+                String verificationResult = planningOrchestrationService.generateText(prompt, githubToken,
+                        copilotModel);
 
                 // Update Step D: Completion
                 updateJobState(jobId, JobStatus.COMPLETED, "VERIFICATION_COMPLETE", verificationResult);

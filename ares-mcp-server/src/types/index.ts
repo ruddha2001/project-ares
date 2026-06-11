@@ -17,10 +17,6 @@ export interface JobResponse {
 }
 
 export const PlanningSchema: any = {
-  projectId: z
-    .string()
-    .uuid('projectId must be a valid tracking UUID namespace.')
-    .optional(),
   taskDescription: z
     .string()
     .min(5, 'Task description must contain clear development context.'),
