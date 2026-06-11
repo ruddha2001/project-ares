@@ -2,9 +2,7 @@ package codes.ani.ares.backend.controller;
 
 import codes.ani.ares.backend.model.AresJob;
 import codes.ani.ares.backend.model.JobStatus;
-import codes.ani.ares.backend.model.Project;
 import codes.ani.ares.backend.repository.AresJobRepository;
-import codes.ani.ares.backend.repository.KnowledgeIndexRepository;
 import codes.ani.ares.backend.repository.ProjectRepository;
 import codes.ani.ares.backend.service.PlanningOrchestrationService;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.UUID;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/jobs")
@@ -24,80 +21,20 @@ import java.util.List;
 public class JobController {
 
     private final AresJobRepository jobRepository;
-    private final PlanningOrchestrationService planningOrchestrationService;
     private final ProjectRepository projectRepository;
-    private final KnowledgeIndexRepository indexRepository;
-
-    private String normalizeGitUrl(String url) {
-        if (url == null) return "";
-        String normalized = url.trim();
-        normalized = normalized.replaceAll("^(git@|https?://|git://|ssh://)", "");
-        normalized = normalized.replace(":", "/");
-        if (normalized.endsWith(".git")) {
-            normalized = normalized.substring(0, normalized.length() - 4);
-        }
-        return normalized.toLowerCase();
-    }
+    private final PlanningOrchestrationService planningOrchestrationService;
 
     @PostMapping
-    public ResponseEntity<?> createJob(@RequestBody AresJob jobInitialArgs) {
-        UUID pid = jobInitialArgs.getProjectId();
-        if (pid == null || !projectRepository.existsById(pid)) {
-            if (jobInitialArgs.getRepoUrl() == null) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Either projectId or repoUrl must be provided."));
-            }
+    public ResponseEntity<AresJob> createJob(@RequestBody AresJob jobInitialArgs) {
+        return projectRepository.getByRepoUrl(jobInitialArgs.getRepoUrl()).map(project -> {
+            jobInitialArgs.setStatus(JobStatus.INITIALIZED);
+            jobInitialArgs.setCurrentTask("Workspace anchor established");
 
-            String targetNormalized = normalizeGitUrl(jobInitialArgs.getRepoUrl());
-            java.util.List<Project> projects = projectRepository.findAll();
-            Project matchedProject = null;
-            for (var project : projects) {
-                if (targetNormalized.equals(normalizeGitUrl(project.getRepoUrl()))) {
-                    matchedProject = project;
-                    break;
-                }
-            }
-
-            if (matchedProject == null) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(Map.of("error", "No matching project found for repository URL: " + jobInitialArgs.getRepoUrl()));
-            }
-
-            jobInitialArgs.setProjectId(matchedProject.getId());
-        }
-
-        jobInitialArgs.setStatus(JobStatus.INITIALIZED);
-        jobInitialArgs.setCurrentTask("Workspace anchor established");
-
-        AresJob saved = jobRepository.save(jobInitialArgs);
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
-    }
-
-    @PostMapping("/{jobId}/planning")
-    public ResponseEntity<Void> triggerPlanning(
-            @PathVariable UUID jobId,
-            @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
-            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
-        if (!jobRepository.existsById(jobId)) {
-            return ResponseEntity.notFound().build();
-        }
-
-        Thread.startVirtualThread(() -> executePlanningGauntlet(jobId, githubToken, copilotModel));
-
-        return ResponseEntity.accepted().build();
-    }
-
-    @PostMapping("/{jobId}/verification")
-    public ResponseEntity<Void> triggerVerification(
-            @PathVariable UUID jobId,
-            @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
-            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
-        if (!jobRepository.existsById(jobId)) {
-            return ResponseEntity.notFound().build();
-        }
-
-        Thread.startVirtualThread(() -> executeVerificationGauntlet(jobId, githubToken, copilotModel));
-
-        return ResponseEntity.accepted().build();
+            jobInitialArgs.setProjectId(project.getId());
+            AresJob saved = jobRepository.save(jobInitialArgs);
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{jobId}")
@@ -107,205 +44,130 @@ public class JobController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @GetMapping("/{jobId}/status")
-    public ResponseEntity<AresJob> getJobStatusOld(@PathVariable UUID jobId) {
-        return getJobStatus(jobId);
-    }
+    @PostMapping("/{jobId}/planning")
+    public ResponseEntity<Map<String, String>> triggerLibrarianPlanning(
+            @PathVariable UUID jobId,
+            @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
+            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
 
-    private void executePlanningGauntlet(UUID jobId, String githubToken, String copilotModel) {
-        AresJob job = jobRepository.findById(jobId).orElseThrow();
-        try {
-            updateState(job, JobStatus.EXTRACTING_PROMPT_VECTOR, "Extracting prompt vector representation");
+        AresJob job = jobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
 
-            String vectorString = planningOrchestrationService.getEmbedding(
-                    job.getTaskDescription(),
-                    githubToken,
-                    copilotModel);
-
-            updateState(job, JobStatus.RETRIEVING_DATA, "Querying codebase and documentation vector spaces");
-
-            List<codes.ani.ares.backend.model.KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(
-                    job.getProjectId(),
-                    vectorString,
-                    5);
-            List<codes.ani.ares.backend.model.KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(
-                    job.getProjectId(),
-                    vectorString,
-                    5);
-
-            String serializedBlocks = serializeMatches(codebaseMatches, documentMatches);
-            job.setContextBlocks(serializedBlocks);
-            jobRepository.saveAndFlush(job);
-
+        Thread.startVirtualThread(() -> {
             try {
-                Thread.sleep(3000);
-            } catch (Exception ignored) {
+                updateJobState(jobId, JobStatus.PROCESSING, "RETRIEVING_DATA", null);
+
+                UUID projectId = job.getProjectId();
+                String featurePrompt = job.getTaskDescription();
+
+                Map<String, Object> context = planningOrchestrationService.executePlanning(
+                        projectId, featurePrompt, githubToken, copilotModel);
+                String contextPayload = (String) context.get("contextPayload");
+
+                updateJobState(jobId, JobStatus.PROCESSING, "LIBRARIAN_PLANNING", null);
+
+                String prompt = String.format("""
+                        You are Antigravity, a premium agentic AI coding assistant.
+                        Based on the following requirement and context, generate a detailed implementation plan.
+                        Use clear markdown formatting, list modified/new files, and outline the steps clearly.
+
+                        %s
+                        """, contextPayload);
+                String plan = planningOrchestrationService.generateText(prompt, githubToken, copilotModel);
+
+                updateJobState(jobId, JobStatus.COMPLETED, "PLANNING_COMPLETE", plan);
+                log.info("Librarian planning track finalized for job: {}", jobId);
+
+            } catch (Exception e) {
+                log.error("Fatal error inside asynchronous Librarian loop: {}", e.getMessage());
+                updateJobState(jobId, JobStatus.FAILED, "ERROR: " + e.getMessage(), null);
             }
+        });
 
-            updateState(job, JobStatus.LIBRARIAN_PLANNING, "Compiling design strategy brief");
-
-            StringBuilder contextBuilder = new StringBuilder();
-            contextBuilder.append("=== TARGET SYSTEM REQUIREMENT / FEATURE REQUEST ===\n");
-            contextBuilder.append(job.getTaskDescription()).append("\n\n");
-
-            contextBuilder.append("=== TIER 1: MATCHING CODEBASE FRAGMENTS (LOCAL_CODEBASE) ===\n");
-            for (codes.ani.ares.backend.model.KnowledgeIndex match : codebaseMatches) {
-                contextBuilder.append("File: ").append(match.getBlockTitle()).append("\n");
-                contextBuilder.append("Content Snippet:\n").append(match.getBlockContent()).append("\n");
-                contextBuilder.append("--------------------------------------------------\n");
-            }
-
-            contextBuilder.append("\n=== TIER 2: MATCHING SPECIFICATIONS & DOCUMENTATION ===\n");
-            for (codes.ani.ares.backend.model.KnowledgeIndex match : documentMatches) {
-                contextBuilder.append("Source reference: ").append(match.getSourceUrl()).append("\n");
-                contextBuilder.append("Content Details:\n").append(match.getBlockContent()).append("\n");
-                contextBuilder.append("--------------------------------------------------\n");
-            }
-
-            String contextPayload = contextBuilder.toString();
-
-            String prompt = "You are Ares Librarian, an expert AI software architect.\n" +
-                    "Analyze the target system requirement / feature request along with the matching codebase fragments and documentation specifications below.\n"
-                    +
-                    "Come up with a detailed implementation design strategy / plan.\n" +
-                    "In the plan mention document sources used (if any) and also provide file names, short content details, and source URLs for each match.\n"
-                    +
-                    "Make it professional and structured.\n\n" +
-                    contextPayload;
-
-            String generatedPlan = planningOrchestrationService.generateText(prompt, githubToken, copilotModel);
-
-            job.setStatus(JobStatus.COMPLETED);
-            job.setCurrentTask("Planning complete");
-            job.setPayload(generatedPlan);
-            jobRepository.saveAndFlush(job);
-            log.info("Librarian planning track finalized for job: {}", job.getJobId());
-
-        } catch (Exception e) {
-            log.error("Fatal error inside asynchronous Librarian loop: {}", e.getMessage());
-            job.setStatus(JobStatus.FAILED);
-            job.setCurrentTask("ERROR: " + e.getMessage());
-            jobRepository.saveAndFlush(job);
-        }
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
+                "job_id", jobId.toString(),
+                "status", JobStatus.PROCESSING.toString()));
     }
 
-    private void executeVerificationGauntlet(UUID jobId, String githubToken, String copilotModel) {
-        AresJob job = jobRepository.findById(jobId).orElseThrow();
-        try {
-            updateState(job, JobStatus.EXTRACTING_PROMPT_VECTOR, "Extracting prompt vector representation from git diff");
+    @PostMapping("/{jobId}/verification")
+    public ResponseEntity<Map<String, String>> triggerLibrarianVerification(
+            @PathVariable UUID jobId,
+            @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
+            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
 
-            String vectorString = planningOrchestrationService.getEmbedding(
-                    job.getGitDiff(),
-                    githubToken,
-                    copilotModel);
+        AresJob job = jobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
 
-            updateState(job, JobStatus.RETRIEVING_DATA, "Querying codebase and documentation vector spaces");
-
-            List<codes.ani.ares.backend.model.KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(
-                    job.getProjectId(),
-                    vectorString,
-                    5);
-            List<codes.ani.ares.backend.model.KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(
-                    job.getProjectId(),
-                    vectorString,
-                    5);
-
-            String serializedBlocks = serializeMatches(codebaseMatches, documentMatches);
-            job.setContextBlocks(serializedBlocks);
-            jobRepository.saveAndFlush(job);
-
+        Thread.startVirtualThread(() -> {
             try {
-                Thread.sleep(3000);
-            } catch (Exception ignored) {
+                // Update Step A: Vector Extraction State
+                updateJobState(jobId, JobStatus.PROCESSING, "EXTRACTING_DIFF_VECTOR", null);
+
+                // Update Step B: Data Retrieval
+                updateJobState(jobId, JobStatus.PROCESSING, "RETRIEVING_POLICIES", null);
+
+                UUID projectId = job.getProjectId();
+                String gitDiff = job.getGitDiff();
+
+                Map<String, Object> context = planningOrchestrationService.executeVerification(
+                        projectId, gitDiff, githubToken, copilotModel);
+                String contextPayload = (String) context.get("contextPayload");
+
+                // Update Step C: Compliance Review State
+                updateJobState(jobId, JobStatus.PROCESSING, "COMPLIANCE_REVIEW", null);
+
+                String prompt = String.format(
+                        """
+                                You are Antigravity, a premium compliance agent.
+                                Verify if the following git diff aligns with the codebase reference context and specification/compliance policies.
+
+                                === GIT DIFF ===
+                                %s
+
+                                === CONTEXT & POLICIES ===
+                                %s
+
+                                Please perform a code review, check for compliance, and state whether the changes are approved or if there are any issues.
+                                """,
+                        gitDiff, contextPayload);
+                String verificationResult = planningOrchestrationService.generateText(prompt, githubToken,
+                        copilotModel);
+
+                // Update Step D: Completion
+                updateJobState(jobId, JobStatus.COMPLETED, "VERIFICATION_COMPLETE", verificationResult);
+                log.info("Librarian verification track finalized for job: {}", jobId);
+
+            } catch (Exception e) {
+                log.error("Fatal error inside asynchronous Librarian loop: {}", e.getMessage());
+                updateJobState(jobId, JobStatus.FAILED, "ERROR: " + e.getMessage(), null);
             }
+        });
 
-            updateState(job, JobStatus.LIBRARIAN_PLANNING, "Parsing Abstract Syntax Trees (AST) for compliance checking");
-
-            StringBuilder contextBuilder = new StringBuilder();
-            contextBuilder.append("=== TIER 1: CODEBASE REFERENCE CONTEXT ===\n");
-            for (codes.ani.ares.backend.model.KnowledgeIndex match : codebaseMatches) {
-                contextBuilder.append("File: ").append(match.getBlockTitle()).append("\n");
-                contextBuilder.append("Content Snippet:\n").append(match.getBlockContent()).append("\n");
-                contextBuilder.append("--------------------------------------------------\n");
-            }
-
-            contextBuilder.append("\n=== TIER 2: SPECIFICATION & COMPLIANCE POLICIES ===\n");
-            for (codes.ani.ares.backend.model.KnowledgeIndex match : documentMatches) {
-                contextBuilder.append("Source reference: ").append(match.getSourceUrl()).append("\n");
-                contextBuilder.append("Content Details:\n").append(match.getBlockContent()).append("\n");
-                contextBuilder.append("--------------------------------------------------\n");
-            }
-
-            String contextPayload = contextBuilder.toString();
-
-            String prompt = "You are Ares Verification Agent, an expert code reviewer.\n" +
-                    "Review the following git diff against the codebase policies, specifications, and reference patterns provided.\n"
-                    +
-                    "Verify if the changes are compliant or if there are any structural policy violations.\n" +
-                    "Explain your analysis clearly. If everything is fine, confirm that it passed.\n\n" +
-                    "Git Diff:\n" + job.getGitDiff() + "\n\n" +
-                    "Reference Context:\n" + contextPayload;
-
-            String generatedReview = planningOrchestrationService.generateText(prompt, githubToken, copilotModel);
-
-            job.setStatus(JobStatus.COMPLETED);
-            job.setCurrentTask("Verification complete");
-            job.setPayload(generatedReview);
-            jobRepository.saveAndFlush(job);
-            log.info("Verification track finalized for job: {}", job.getJobId());
-
-        } catch (Exception e) {
-            log.error("Fatal error inside asynchronous Verification loop: {}", e.getMessage());
-            job.setStatus(JobStatus.FAILED);
-            job.setCurrentTask("ERROR: " + e.getMessage());
-            jobRepository.saveAndFlush(job);
-        }
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
+                "job_id", jobId.toString(),
+                "status", JobStatus.PROCESSING.toString()));
     }
 
-    private void updateState(AresJob job, JobStatus status, String task) {
-        job.setStatus(status);
-        job.setCurrentTask(task);
-        jobRepository.saveAndFlush(job);
-    }
-
-    private String serializeMatches(List<codes.ani.ares.backend.model.KnowledgeIndex> codebaseMatches,
-            List<codes.ani.ares.backend.model.KnowledgeIndex> documentMatches) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("[");
-        boolean first = true;
-        if (codebaseMatches != null) {
-            for (var match : codebaseMatches) {
-                if (!first) {
-                    sb.append(",");
+    /**
+     * Explicitly fetches a clean record to modify status variables
+     * out-of-band across short-lived thread lifecycles.
+     */
+    private void updateJobState(UUID jobId, JobStatus status, String currentTask, String reportPayload) {
+        try {
+            jobRepository.findById(jobId).ifPresent(job -> {
+                job.setStatus(status);
+                job.setCurrentTask(currentTask);
+                if (reportPayload != null) {
+                    job.setPayload(reportPayload);
                 }
-                first = false;
-                sb.append("{\"documentId\":\"").append(match.getId().toString())
-                        .append("\",\"title\":\"").append(escapeJson(match.getBlockTitle()))
-                        .append("\",\"relevance\":1.0}");
-            }
+                jobRepository.saveAndFlush(job);
+            });
+        } catch (Exception ex) {
+            log.error("Failed to commit telemetry update for job {}: {}", jobId, ex.getMessage());
         }
-        if (documentMatches != null) {
-            for (var match : documentMatches) {
-                if (!first) {
-                    sb.append(",");
-                }
-                first = false;
-                sb.append("{\"documentId\":\"").append(match.getId().toString())
-                        .append("\",\"title\":\"").append(escapeJson(match.getBlockTitle()))
-                        .append("\",\"relevance\":1.0}");
-            }
-        }
-        sb.append("]");
-        return sb.toString();
-    }
-
-    private String escapeJson(String input) {
-        if (input == null)
-            return "";
-        return input.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
     }
 }
