@@ -21,6 +21,7 @@ public class PlanningOrchestrationService {
 
     private final KnowledgeIndexRepository indexRepository;
     private final RestClient inferenceWorkerClient;
+    private final RestClient.Builder restClientBuilder;
     private RestClient ollamaClient;
 
     @Value("${COPILOT_MODEL:}")
@@ -34,7 +35,7 @@ public class PlanningOrchestrationService {
 
     @PostConstruct
     public void init() {
-        this.ollamaClient = RestClient.builder().baseUrl(inferenceUrl).build();
+        this.ollamaClient = restClientBuilder.baseUrl(inferenceUrl).build();
     }
 
     public String getEmbedding(String textPrompt) {
@@ -43,7 +44,7 @@ public class PlanningOrchestrationService {
 
     @SuppressWarnings("unchecked")
     public String getEmbedding(String textPrompt, String effectiveGithubToken, String effectiveCopilotModel) {
-        Map<String, Object> response;
+        String responseStr;
         String finalModel = (effectiveCopilotModel != null && !effectiveCopilotModel.trim().isEmpty())
                 ? effectiveCopilotModel
                 : this.copilotModel;
@@ -53,7 +54,7 @@ public class PlanningOrchestrationService {
 
         if (finalModel != null && !finalModel.trim().isEmpty()) {
             log.info("Requesting vector embedding extraction from Copilot CLI via inference-worker...");
-            response = inferenceWorkerClient.post()
+            responseStr = inferenceWorkerClient.post()
                     .uri("/api/embeddings")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of(
@@ -61,15 +62,23 @@ public class PlanningOrchestrationService {
                             "copilot_model", finalModel,
                             "github_token", finalToken))
                     .retrieve()
-                    .body(Map.class);
+                    .body(String.class);
         } else {
             log.info("Requesting vector embedding extraction from local inference-sidecar (Ollama)...");
-            response = ollamaClient.post()
+            responseStr = ollamaClient.post()
                     .uri("/api/embeddings")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("model", "nomic-embed-text", "prompt", textPrompt))
                     .retrieve()
-                    .body(Map.class);
+                    .body(String.class);
+        }
+
+        Map<String, Object> response;
+        try {
+            response = org.springframework.boot.json.JsonParserFactory.getJsonParser().parseMap(responseStr);
+        } catch (Exception e) {
+            log.error("Failed to parse embeddings response JSON: {}", responseStr, e);
+            throw new IllegalStateException("Failed to harvest vector representation due to JSON parse error.");
         }
 
         if (response == null || !response.containsKey("embedding")) {
@@ -173,9 +182,8 @@ public class PlanningOrchestrationService {
                 "documentMatches", documentMatches);
     }
 
-    @SuppressWarnings("unchecked")
     public String generateText(String prompt, String effectiveGithubToken, String effectiveCopilotModel) {
-        Map<String, Object> response;
+        String responseStr;
         String finalModel = (effectiveCopilotModel != null && !effectiveCopilotModel.trim().isEmpty())
                 ? effectiveCopilotModel
                 : this.copilotModel;
@@ -185,7 +193,7 @@ public class PlanningOrchestrationService {
 
         if (finalModel != null && !finalModel.trim().isEmpty()) {
             log.info("Requesting completion generation from Copilot CLI via inference-worker...");
-            response = inferenceWorkerClient.post()
+            responseStr = inferenceWorkerClient.post()
                     .uri("/api/generate")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of(
@@ -193,15 +201,23 @@ public class PlanningOrchestrationService {
                             "copilot_model", finalModel,
                             "github_token", finalToken))
                     .retrieve()
-                    .body(Map.class);
+                    .body(String.class);
         } else {
             log.info("Requesting completion generation from local inference-sidecar (Ollama)...");
-            response = ollamaClient.post()
+            responseStr = ollamaClient.post()
                     .uri("/api/generate")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("model", "llama3", "prompt", prompt, "stream", false))
                     .retrieve()
-                    .body(Map.class);
+                    .body(String.class);
+        }
+
+        Map<String, Object> response;
+        try {
+            response = org.springframework.boot.json.JsonParserFactory.getJsonParser().parseMap(responseStr);
+        } catch (Exception e) {
+            log.error("Failed to parse generation response JSON: {}", responseStr, e);
+            throw new IllegalStateException("Failed to harvest completion response due to JSON parse error.");
         }
 
         if (response == null || !response.containsKey("response")) {
@@ -210,5 +226,4 @@ public class PlanningOrchestrationService {
 
         return (String) response.get("response");
     }
-
 }
