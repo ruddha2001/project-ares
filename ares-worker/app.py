@@ -28,6 +28,46 @@ class DocumentPayload(BaseModel):
     github_token: Optional[str] = None
     copilot_model: Optional[str] = None
 
+class EmbeddingPayload(BaseModel):
+    prompt: str
+    github_token: Optional[str] = None
+    copilot_model: Optional[str] = None
+
+
+@app.post("/api/embeddings")
+def get_embeddings(payload: EmbeddingPayload):
+    try:
+        from embeddings import fetch_embedding
+        vector = fetch_embedding(
+            payload.prompt,
+            github_token=payload.github_token,
+            copilot_model=payload.copilot_model
+        )
+        return {"embedding": vector}
+    except Exception as e:
+        logging.error(f"Error generating embeddings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class GeneratePayload(BaseModel):
+    prompt: str
+    github_token: Optional[str] = None
+    copilot_model: Optional[str] = None
+
+@app.post("/api/generate")
+def generate_text(payload: GeneratePayload):
+    try:
+        from embeddings import fetch_completion
+        response_text = fetch_completion(
+            payload.prompt,
+            github_token=payload.github_token,
+            copilot_model=payload.copilot_model
+        )
+        return {"response": response_text}
+    except Exception as e:
+        logging.error(f"Error generating text: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.post("/api/v1/etl/codebase", status_code=202)
 def trigger_codebase_ingestion(

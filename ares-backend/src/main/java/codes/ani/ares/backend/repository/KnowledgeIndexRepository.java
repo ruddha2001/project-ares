@@ -14,11 +14,24 @@ public interface KnowledgeIndexRepository extends JpaRepository<KnowledgeIndex, 
         @Query(value = """
                         SELECT * FROM ares_knowledge_indices
                         WHERE project_id = :projectId
+                          AND source_origin = 'LOCAL_CODEBASE'
                         ORDER BY embedding <=> cast(:queryEmbedding as vector)
-                        LIMIT :maxResults
+                        LIMIT :limitBound
                         """, nativeQuery = true)
-        List<KnowledgeIndex> findNearestBlocksByProject(
+        List<KnowledgeIndex> searchCodebase(
                         @Param("projectId") UUID projectId,
-                        @Param("queryEmbedding") float[] queryEmbedding,
-                        @Param("maxResults") int maxResults);
+                        @Param("queryEmbedding") String queryEmbedding,
+                        @Param("limitBound") int limitBound);
+
+        @Query(value = """
+                        SELECT * FROM ares_knowledge_indices
+                        WHERE project_id = :projectId
+                          AND source_origin != 'LOCAL_CODEBASE'
+                        ORDER BY embedding <=> cast(:queryEmbedding as vector)
+                        LIMIT :limitBound
+                        """, nativeQuery = true)
+        List<KnowledgeIndex> searchDocumentation(
+                        @Param("projectId") UUID projectId,
+                        @Param("queryEmbedding") String queryEmbedding,
+                        @Param("limitBound") int limitBound);
 }

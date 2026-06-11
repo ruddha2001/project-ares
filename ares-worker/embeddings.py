@@ -102,3 +102,55 @@ def fetch_embedding(
         except Exception as e:
             logging.error(f"Failed to fetch embedding from local Ollama at {endpoint}: {e}")
             raise RuntimeError("Local Ollama embedding inference failed.") from e
+
+def fetch_completion(
+    prompt: str,
+    github_token: Optional[str] = None,
+    copilot_model: Optional[str] = None
+) -> str:
+    """
+    If copilot_model is provided, query it via the Copilot CLI.
+    Otherwise, default to querying the local Ollama inference service.
+    """
+    if copilot_model:
+        token = github_token or os.environ.get("GITHUB_PAT") or os.environ.get("GITHUB_TOKEN")
+        if not token:
+            raise ValueError("GitHub token is required to invoke Copilot CLI completion inside the container.")
+
+        cmd = ["copilot", "-p", prompt, "-s", "--no-ask-user", "--model", copilot_model]
+        
+        env = os.environ.copy()
+        env["HOME"] = "/tmp"
+        env["COPILOT_GITHUB_TOKEN"] = token
+        env.pop("GH_TOKEN", None)
+        env.pop("GITHUB_TOKEN", None)
+
+        try:
+            result = subprocess.run(
+                cmd,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return result.stdout.strip()
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Copilot CLI completion execution failed: {e.stderr}")
+            raise RuntimeError("Copilot CLI completion failed.") from e
+
+    else:
+        # Default to local Ollama
+        ollama_url = os.environ.get("INFERENCE_URL", "http://inference-sidecar:11434")
+        endpoint = f"{ollama_url.rstrip('/')}/api/generate"
+        payload = {"model": "llama3", "prompt": prompt, "stream": False}
+        
+        try:
+            import httpx
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(endpoint, json=payload)
+                response.raise_for_status()
+                return response.json()["response"].strip()
+        except Exception as e:
+            logging.error(f"Failed to fetch completion from local Ollama at {endpoint}: {e}")
+            raise RuntimeError("Local Ollama completion failed.") from e
+

@@ -58,6 +58,9 @@ services:
       - SPRING_DATASOURCE_USERNAME=${DB_USER}
       - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD}
       - INFERENCE_WORKER_URL=http://ares-worker:8000
+      - COPILOT_MODEL=${COPILOT_MODEL}
+      - GITHUB_PAT=${GITHUB_PAT}
+      - INFERENCE_URL=${INFERENCE_URL}
     ports:
       - "8080:8080"
     networks:
