@@ -1,20 +1,24 @@
 package codes.ani.ares.backend.controller;
 
+import codes.ani.ares.backend.dto.AuditMetadataUtil;
+import codes.ani.ares.backend.dto.JobPlanRequest;
+import codes.ani.ares.backend.dto.JobPlanResponse;
 import codes.ani.ares.backend.model.AresJob;
 import codes.ani.ares.backend.model.JobStatus;
 import codes.ani.ares.backend.repository.AresJobRepository;
 import codes.ani.ares.backend.repository.ProjectRepository;
+import codes.ani.ares.backend.service.JobPlanningService;
 import codes.ani.ares.backend.service.PlanningOrchestrationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/jobs")
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "*")
@@ -23,8 +27,9 @@ public class JobController {
     private final AresJobRepository jobRepository;
     private final ProjectRepository projectRepository;
     private final PlanningOrchestrationService planningOrchestrationService;
+    private final JobPlanningService jobPlanningService;
 
-    @PostMapping
+    @PostMapping("/api/v1/jobs")
     public ResponseEntity<AresJob> createJob(@RequestBody AresJob jobInitialArgs) {
         return projectRepository.getByRepoUrl(jobInitialArgs.getRepoUrl()).map(project -> {
             jobInitialArgs.setStatus(JobStatus.INITIALIZED);
@@ -37,14 +42,14 @@ public class JobController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @GetMapping("/{jobId}")
+    @GetMapping("/api/v1/jobs/{jobId}")
     public ResponseEntity<AresJob> getJobStatus(@PathVariable UUID jobId) {
         return jobRepository.findById(jobId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @PostMapping("/{jobId}/planning")
+    @PostMapping("/api/v1/jobs/{jobId}/planning")
     public ResponseEntity<Map<String, String>> triggerLibrarianPlanning(
             @PathVariable UUID jobId,
             @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
@@ -91,7 +96,7 @@ public class JobController {
                 "status", JobStatus.PROCESSING.toString()));
     }
 
-    @PostMapping("/{jobId}/verification")
+    @PostMapping("/api/v1/jobs/{jobId}/verification")
     public ResponseEntity<Map<String, String>> triggerLibrarianVerification(
             @PathVariable UUID jobId,
             @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
@@ -150,6 +155,44 @@ public class JobController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "job_id", jobId.toString(),
                 "status", JobStatus.PROCESSING.toString()));
+    }
+
+    @PostMapping("/api/v1/job/plan")
+    public ResponseEntity<JobPlanResponse> triggerJobPlanning(
+            @RequestParam UUID projectId,
+            @RequestBody JobPlanRequest request,
+            @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
+            @RequestHeader(value = "X-ARES-NOTION-TOKEN", required = false) String notionToken,
+            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
+
+        if (!projectRepository.existsById(projectId)) {
+            return ResponseEntity.notFound().build();
+        }
+
+        AresJob job = AresJob.builder()
+                .projectId(projectId)
+                .status(JobStatus.PROCESSING)
+                .currentTask("Workspace anchor established")
+                .taskDescription(request.prompt())
+                .auditMetadata(AuditMetadataUtil.generateAuditMetadata(githubToken, notionToken))
+                .build();
+
+        AresJob savedJob = jobRepository.save(job);
+
+        jobPlanningService.runPlanningOrchestration(
+                savedJob.getJobId(),
+                projectId,
+                request.prompt(),
+                githubToken,
+                notionToken,
+                copilotModel
+        );
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(new JobPlanResponse(
+                projectId,
+                savedJob.getJobId(),
+                savedJob.getStatus().toString()
+        ));
     }
 
     /**

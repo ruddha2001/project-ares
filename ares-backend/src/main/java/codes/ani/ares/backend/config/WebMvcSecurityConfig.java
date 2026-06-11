@@ -12,6 +12,6 @@ public class WebMvcSecurityConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry){
-        registry.addInterceptor(developerTokenInterceptor).addPathPatterns("/api/v1/baseline/**", "/api/v1/jobs/**");
+        registry.addInterceptor(developerTokenInterceptor).addPathPatterns("/api/v1/baseline/**", "/api/v1/jobs/**", "/api/v1/job/**");
     }
 }

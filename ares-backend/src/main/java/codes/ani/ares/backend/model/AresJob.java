@@ -50,6 +50,9 @@ public class AresJob {
     @Column(name = "payload", columnDefinition = "TEXT")
     private String payload;
 
+    @Column(name = "audit_metadata", columnDefinition = "TEXT")
+    private String auditMetadata;
+
     @Column(name = "created_at", updatable = false, nullable = false)
     private LocalDateTime createdAt;
 
