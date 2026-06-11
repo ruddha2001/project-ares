@@ -21,7 +21,7 @@ export async function executeAresJobFlow(
     const token = process.env.COPILOT_GITHUB_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_TOKEN || '';
     const copilotModel = process.env.COPILOT_MODEL || '';
 
-    const initResponse = await fetch(`${BACKEND_URL}/api/v1/job`, {
+    const initResponse = await fetch(`${BACKEND_URL}/api/v1/jobs`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/job")
+@RequestMapping("/api/v1/jobs")
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "*")
@@ -22,57 +22,131 @@ public class JobController {
     private final AresJobRepository jobRepository;
     private final PlanningOrchestrationService planningOrchestrationService;
 
-    @GetMapping("/{jobId}/status")
+    @PostMapping
+    public ResponseEntity<AresJob> createJob(@RequestBody AresJob jobInitialArgs) {
+        jobInitialArgs.setStatus(JobStatus.INITIALIZED);
+        jobInitialArgs.setCurrentTask("Workspace anchor established");
+
+        AresJob saved = jobRepository.save(jobInitialArgs);
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
+    @GetMapping("/{jobId}")
     public ResponseEntity<AresJob> getJobStatus(@PathVariable UUID jobId) {
         return jobRepository.findById(jobId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @PostMapping("/plan")
+    @PostMapping("/{jobId}/planning")
     public ResponseEntity<Map<String, String>> triggerLibrarianPlanning(
-            @RequestParam("projectId") UUID projectId,
-            @RequestBody Map<String, String> body) {
+            @PathVariable UUID jobId,
+            @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
+            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
 
-        String featurePrompt = body.get("prompt");
+        AresJob job = jobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
 
-        // 1. Core State Handshake: Save initial record on the synchronous request
-        // thread
-        AresJob job = AresJob.builder()
-                .projectId(projectId)
-                .status(JobStatus.INITIALIZED)
-                .currentTask("Spawning Librarian Planning thread")
-                .build();
-        AresJob savedJob = jobRepository.save(job);
-        UUID targetJobId = savedJob.getJobId();
-
-        // 2. Launch background execution without blocking on transaction contexts
         Thread.startVirtualThread(() -> {
             try {
                 // Update Step A: Vector Extraction State
-                updateJobState(targetJobId, JobStatus.PROCESSING, "EXTRACTING_PROMPT_VECTOR", null);
+                updateJobState(jobId, JobStatus.PROCESSING, "EXTRACTING_PROMPT_VECTOR", null);
 
                 // Update Step B: Data Retrieval
-                updateJobState(targetJobId, JobStatus.PROCESSING, "RETRIEVING_DATA", null);
-                String aggregatedPayload = planningOrchestrationService.compileLibrarianContextPayload(projectId,
-                        featurePrompt);
+                updateJobState(jobId, JobStatus.PROCESSING, "RETRIEVING_DATA", null);
+                
+                UUID projectId = job.getProjectId();
+                String featurePrompt = job.getTaskDescription();
+                
+                Map<String, Object> context = planningOrchestrationService.executePlanning(
+                        projectId, featurePrompt, githubToken, copilotModel);
+                String contextPayload = (String) context.get("contextPayload");
 
                 // Update Step C: Planning Processing State
-                updateJobState(targetJobId, JobStatus.PROCESSING, "LIBRARIAN_PLANNING", null);
+                updateJobState(jobId, JobStatus.PROCESSING, "LIBRARIAN_PLANNING", null);
+
+                String prompt = String.format("""
+                        You are Antigravity, a premium agentic AI coding assistant.
+                        Based on the following requirement and context, generate a detailed implementation plan.
+                        Use clear markdown formatting, list modified/new files, and outline the steps clearly.
+                        
+                        %s
+                        """, contextPayload);
+                String plan = planningOrchestrationService.generateText(prompt, githubToken, copilotModel);
 
                 // Update Step D: Completion
-                updateJobState(targetJobId, JobStatus.COMPLETED, "PLANNING_COMPLETE", aggregatedPayload);
-                log.info("Librarian planning track finalized for job: {}", targetJobId);
+                updateJobState(jobId, JobStatus.COMPLETED, "PLANNING_COMPLETE", plan);
+                log.info("Librarian planning track finalized for job: {}", jobId);
 
             } catch (Exception e) {
                 log.error("Fatal error inside asynchronous Librarian loop: {}", e.getMessage());
-                updateJobState(targetJobId, JobStatus.FAILED, "ERROR: " + e.getMessage(), null);
+                updateJobState(jobId, JobStatus.FAILED, "ERROR: " + e.getMessage(), null);
             }
         });
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
-                "job_id", targetJobId.toString(),
-                "status", JobStatus.INITIALIZED.toString()));
+                "job_id", jobId.toString(),
+                "status", JobStatus.PROCESSING.toString()));
+    }
+
+    @PostMapping("/{jobId}/verification")
+    public ResponseEntity<Map<String, String>> triggerLibrarianVerification(
+            @PathVariable UUID jobId,
+            @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
+            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
+
+        AresJob job = jobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Thread.startVirtualThread(() -> {
+            try {
+                // Update Step A: Vector Extraction State
+                updateJobState(jobId, JobStatus.PROCESSING, "EXTRACTING_DIFF_VECTOR", null);
+
+                // Update Step B: Data Retrieval
+                updateJobState(jobId, JobStatus.PROCESSING, "RETRIEVING_POLICIES", null);
+                
+                UUID projectId = job.getProjectId();
+                String gitDiff = job.getGitDiff();
+                
+                Map<String, Object> context = planningOrchestrationService.executeVerification(
+                        projectId, gitDiff, githubToken, copilotModel);
+                String contextPayload = (String) context.get("contextPayload");
+
+                // Update Step C: Compliance Review State
+                updateJobState(jobId, JobStatus.PROCESSING, "COMPLIANCE_REVIEW", null);
+
+                String prompt = String.format("""
+                        You are Antigravity, a premium compliance agent.
+                        Verify if the following git diff aligns with the codebase reference context and specification/compliance policies.
+                        
+                        === GIT DIFF ===
+                        %s
+                        
+                        === CONTEXT & POLICIES ===
+                        %s
+                        
+                        Please perform a code review, check for compliance, and state whether the changes are approved or if there are any issues.
+                        """, gitDiff, contextPayload);
+                String verificationResult = planningOrchestrationService.generateText(prompt, githubToken, copilotModel);
+
+                // Update Step D: Completion
+                updateJobState(jobId, JobStatus.COMPLETED, "VERIFICATION_COMPLETE", verificationResult);
+                log.info("Librarian verification track finalized for job: {}", jobId);
+
+            } catch (Exception e) {
+                log.error("Fatal error inside asynchronous Librarian loop: {}", e.getMessage());
+                updateJobState(jobId, JobStatus.FAILED, "ERROR: " + e.getMessage(), null);
+            }
+        });
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
+                "job_id", jobId.toString(),
+                "status", JobStatus.PROCESSING.toString()));
     }
 
     /**
