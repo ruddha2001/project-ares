@@ -1,7 +1,10 @@
+import fs from 'fs';
+import path from 'path';
+
 export function isNotionUrl(urlStr: string): boolean {
   try {
     const parsed = new URL(urlStr);
-    return parsed.hostname.endsWith('notion.so') || parsed.hostname.endsWith('notion.site');
+    return parsed.hostname.endsWith('notion.so') || parsed.hostname.endsWith('notion.site') || parsed.hostname.endsWith('notion.com');
   } catch {
     return false;
   }
@@ -141,7 +144,23 @@ export async function resolveNotionTaskDescription(urlStr: string): Promise<stri
     return urlStr;
   }
 
-  const token = process.env.NOTION_TOKEN;
+  let token = process.env.NOTION_TOKEN;
+  if (!token) {
+    try {
+      const envPath = path.resolve(process.cwd(), '.env');
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, 'utf8');
+        const match = envContent.match(/^NOTION_TOKEN\s*=\s*(.+)$/m);
+        if (match) {
+          token = match[1].trim().replace(/^['"]|['"]$/g, '');
+          process.env.NOTION_TOKEN = token;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
   if (!token) {
     throw new Error('Notion API token (NOTION_TOKEN) is not set in the environment.');
   }

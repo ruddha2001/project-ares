@@ -29,7 +29,8 @@ export async function executeAresJobFlow(
         ...(copilotModel ? { 'X-ARES-COPILOT-MODEL': copilotModel } : {}),
       },
       body: JSON.stringify({
-        projectId: payload.projectId,
+        projectId: payload.projectId || null,
+        repoUrl: payload.repoUrl || null,
         taskDescription: payload.taskDescription || null,
         gitDiff: payload.gitDiff || null,
       }),

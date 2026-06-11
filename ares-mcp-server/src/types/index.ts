@@ -19,7 +19,8 @@ export interface JobResponse {
 export const PlanningSchema: any = {
   projectId: z
     .string()
-    .uuid('projectId must be a valid tracking UUID namespace.'),
+    .uuid('projectId must be a valid tracking UUID namespace.')
+    .optional(),
   taskDescription: z
     .string()
     .min(5, 'Task description must contain clear development context.'),
@@ -27,6 +28,7 @@ export const PlanningSchema: any = {
 export const VerificationSchema: any = {
   projectId: z
     .string()
-    .uuid('projectId must be a valid tracking UUID namespace.'),
+    .uuid('projectId must be a valid tracking UUID namespace.')
+    .optional(),
   gitDiff: z.string().min(1, 'Git diff context stream cannot be empty.'),
 };

@@ -2,7 +2,10 @@ package codes.ani.ares.backend.controller;
 
 import codes.ani.ares.backend.model.AresJob;
 import codes.ani.ares.backend.model.JobStatus;
+import codes.ani.ares.backend.model.Project;
 import codes.ani.ares.backend.repository.AresJobRepository;
+import codes.ani.ares.backend.repository.KnowledgeIndexRepository;
+import codes.ani.ares.backend.repository.ProjectRepository;
 import codes.ani.ares.backend.service.PlanningOrchestrationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,9 +25,46 @@ public class JobController {
 
     private final AresJobRepository jobRepository;
     private final PlanningOrchestrationService planningOrchestrationService;
+    private final ProjectRepository projectRepository;
+    private final KnowledgeIndexRepository indexRepository;
+
+    private String normalizeGitUrl(String url) {
+        if (url == null) return "";
+        String normalized = url.trim();
+        normalized = normalized.replaceAll("^(git@|https?://|git://|ssh://)", "");
+        normalized = normalized.replace(":", "/");
+        if (normalized.endsWith(".git")) {
+            normalized = normalized.substring(0, normalized.length() - 4);
+        }
+        return normalized.toLowerCase();
+    }
 
     @PostMapping
-    public ResponseEntity<AresJob> createJob(@RequestBody AresJob jobInitialArgs) {
+    public ResponseEntity<?> createJob(@RequestBody AresJob jobInitialArgs) {
+        UUID pid = jobInitialArgs.getProjectId();
+        if (pid == null || !projectRepository.existsById(pid)) {
+            if (jobInitialArgs.getRepoUrl() == null) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Either projectId or repoUrl must be provided."));
+            }
+
+            String targetNormalized = normalizeGitUrl(jobInitialArgs.getRepoUrl());
+            java.util.List<Project> projects = projectRepository.findAll();
+            Project matchedProject = null;
+            for (var project : projects) {
+                if (targetNormalized.equals(normalizeGitUrl(project.getRepoUrl()))) {
+                    matchedProject = project;
+                    break;
+                }
+            }
+
+            if (matchedProject == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("error", "No matching project found for repository URL: " + jobInitialArgs.getRepoUrl()));
+            }
+
+            jobInitialArgs.setProjectId(matchedProject.getId());
+        }
+
         jobInitialArgs.setStatus(JobStatus.INITIALIZED);
         jobInitialArgs.setCurrentTask("Workspace anchor established");
 
@@ -75,32 +115,54 @@ public class JobController {
     private void executePlanningGauntlet(UUID jobId, String githubToken, String copilotModel) {
         AresJob job = jobRepository.findById(jobId).orElseThrow();
         try {
-            updateState(job, JobStatus.VECTOR_FETCH, "Querying HNSW index using task description vectors");
+            updateState(job, JobStatus.EXTRACTING_PROMPT_VECTOR, "Extracting prompt vector representation");
 
-            Map<String, Object> planningResult = planningOrchestrationService.executePlanning(
-                    job.getProjectId(),
+            String vectorString = planningOrchestrationService.getEmbedding(
                     job.getTaskDescription(),
                     githubToken,
                     copilotModel);
 
-            String contextPayload = (String) planningResult.get("contextPayload");
-            @SuppressWarnings("unchecked")
-            List<codes.ani.ares.backend.model.KnowledgeIndex> codebaseMatches = (List<codes.ani.ares.backend.model.KnowledgeIndex>) planningResult
-                    .get("codebaseMatches");
-            @SuppressWarnings("unchecked")
-            List<codes.ani.ares.backend.model.KnowledgeIndex> documentMatches = (List<codes.ani.ares.backend.model.KnowledgeIndex>) planningResult
-                    .get("documentMatches");
+            updateState(job, JobStatus.RETRIEVING_DATA, "Querying codebase and documentation vector spaces");
+
+            List<codes.ani.ares.backend.model.KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(
+                    job.getProjectId(),
+                    vectorString,
+                    5);
+            List<codes.ani.ares.backend.model.KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(
+                    job.getProjectId(),
+                    vectorString,
+                    5);
 
             String serializedBlocks = serializeMatches(codebaseMatches, documentMatches);
             job.setContextBlocks(serializedBlocks);
             jobRepository.saveAndFlush(job);
 
             try {
-                Thread.sleep(1500);
+                Thread.sleep(3000);
             } catch (Exception ignored) {
             }
 
-            updateState(job, JobStatus.ANALYZING, "Compiling design strategy brief");
+            updateState(job, JobStatus.LIBRARIAN_PLANNING, "Compiling design strategy brief");
+
+            StringBuilder contextBuilder = new StringBuilder();
+            contextBuilder.append("=== TARGET SYSTEM REQUIREMENT / FEATURE REQUEST ===\n");
+            contextBuilder.append(job.getTaskDescription()).append("\n\n");
+
+            contextBuilder.append("=== TIER 1: MATCHING CODEBASE FRAGMENTS (LOCAL_CODEBASE) ===\n");
+            for (codes.ani.ares.backend.model.KnowledgeIndex match : codebaseMatches) {
+                contextBuilder.append("File: ").append(match.getBlockTitle()).append("\n");
+                contextBuilder.append("Content Snippet:\n").append(match.getBlockContent()).append("\n");
+                contextBuilder.append("--------------------------------------------------\n");
+            }
+
+            contextBuilder.append("\n=== TIER 2: MATCHING SPECIFICATIONS & DOCUMENTATION ===\n");
+            for (codes.ani.ares.backend.model.KnowledgeIndex match : documentMatches) {
+                contextBuilder.append("Source reference: ").append(match.getSourceUrl()).append("\n");
+                contextBuilder.append("Content Details:\n").append(match.getBlockContent()).append("\n");
+                contextBuilder.append("--------------------------------------------------\n");
+            }
+
+            String contextPayload = contextBuilder.toString();
 
             String prompt = "You are Ares Librarian, an expert AI software architect.\n" +
                     "Analyze the target system requirement / feature request along with the matching codebase fragments and documentation specifications below.\n"
@@ -130,32 +192,51 @@ public class JobController {
     private void executeVerificationGauntlet(UUID jobId, String githubToken, String copilotModel) {
         AresJob job = jobRepository.findById(jobId).orElseThrow();
         try {
-            updateState(job, JobStatus.VECTOR_FETCH, "Analyzing git diff chunks and scanning similarity space");
+            updateState(job, JobStatus.EXTRACTING_PROMPT_VECTOR, "Extracting prompt vector representation from git diff");
 
-            Map<String, Object> verificationResult = planningOrchestrationService.executeVerification(
-                    job.getProjectId(),
+            String vectorString = planningOrchestrationService.getEmbedding(
                     job.getGitDiff(),
                     githubToken,
                     copilotModel);
 
-            String contextPayload = (String) verificationResult.get("contextPayload");
-            @SuppressWarnings("unchecked")
-            List<codes.ani.ares.backend.model.KnowledgeIndex> codebaseMatches = (List<codes.ani.ares.backend.model.KnowledgeIndex>) verificationResult
-                    .get("codebaseMatches");
-            @SuppressWarnings("unchecked")
-            List<codes.ani.ares.backend.model.KnowledgeIndex> documentMatches = (List<codes.ani.ares.backend.model.KnowledgeIndex>) verificationResult
-                    .get("documentMatches");
+            updateState(job, JobStatus.RETRIEVING_DATA, "Querying codebase and documentation vector spaces");
+
+            List<codes.ani.ares.backend.model.KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(
+                    job.getProjectId(),
+                    vectorString,
+                    5);
+            List<codes.ani.ares.backend.model.KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(
+                    job.getProjectId(),
+                    vectorString,
+                    5);
 
             String serializedBlocks = serializeMatches(codebaseMatches, documentMatches);
             job.setContextBlocks(serializedBlocks);
             jobRepository.saveAndFlush(job);
 
             try {
-                Thread.sleep(1500);
+                Thread.sleep(3000);
             } catch (Exception ignored) {
             }
 
-            updateState(job, JobStatus.ANALYZING, "Parsing Abstract Syntax Trees (AST) for compliance checking");
+            updateState(job, JobStatus.LIBRARIAN_PLANNING, "Parsing Abstract Syntax Trees (AST) for compliance checking");
+
+            StringBuilder contextBuilder = new StringBuilder();
+            contextBuilder.append("=== TIER 1: CODEBASE REFERENCE CONTEXT ===\n");
+            for (codes.ani.ares.backend.model.KnowledgeIndex match : codebaseMatches) {
+                contextBuilder.append("File: ").append(match.getBlockTitle()).append("\n");
+                contextBuilder.append("Content Snippet:\n").append(match.getBlockContent()).append("\n");
+                contextBuilder.append("--------------------------------------------------\n");
+            }
+
+            contextBuilder.append("\n=== TIER 2: SPECIFICATION & COMPLIANCE POLICIES ===\n");
+            for (codes.ani.ares.backend.model.KnowledgeIndex match : documentMatches) {
+                contextBuilder.append("Source reference: ").append(match.getSourceUrl()).append("\n");
+                contextBuilder.append("Content Details:\n").append(match.getBlockContent()).append("\n");
+                contextBuilder.append("--------------------------------------------------\n");
+            }
+
+            String contextPayload = contextBuilder.toString();
 
             String prompt = "You are Ares Verification Agent, an expert code reviewer.\n" +
                     "Review the following git diff against the codebase policies, specifications, and reference patterns provided.\n"

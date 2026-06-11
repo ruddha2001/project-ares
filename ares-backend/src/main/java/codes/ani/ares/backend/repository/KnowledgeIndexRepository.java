@@ -12,10 +12,11 @@ import java.util.UUID;
 @Repository
 public interface KnowledgeIndexRepository extends JpaRepository<KnowledgeIndex, UUID> {
         @Query(value = """
-                        SELECT * FROM ares_knowledge_indices
+                        SELECT id, project_id, source_origin, source_url, block_title, block_content, NULL as embedding, created_at, updated_at
+                        FROM ares_knowledge_indices
                         WHERE project_id = :projectId
                           AND source_origin = 'LOCAL_CODEBASE'
-                        ORDER BY embedding <=> cast(:queryEmbedding as vector)
+                        ORDER BY embedding <=> cast(cast(:queryEmbedding as text) as vector)
                         LIMIT :limitBound
                         """, nativeQuery = true)
         List<KnowledgeIndex> searchCodebase(
@@ -24,10 +25,11 @@ public interface KnowledgeIndexRepository extends JpaRepository<KnowledgeIndex, 
                         @Param("limitBound") int limitBound);
 
         @Query(value = """
-                        SELECT * FROM ares_knowledge_indices
+                        SELECT id, project_id, source_origin, source_url, block_title, block_content, NULL as embedding, created_at, updated_at
+                        FROM ares_knowledge_indices
                         WHERE project_id = :projectId
                           AND source_origin != 'LOCAL_CODEBASE'
-                        ORDER BY embedding <=> cast(:queryEmbedding as vector)
+                        ORDER BY embedding <=> cast(cast(:queryEmbedding as text) as vector)
                         LIMIT :limitBound
                         """, nativeQuery = true)
         List<KnowledgeIndex> searchDocumentation(
