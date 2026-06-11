@@ -5,13 +5,14 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
 @Table(name = "ares_projects")
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class Project {
     @Id
@@ -25,7 +26,7 @@ public class Project {
     private String repoUrl;
 
     @Column(name = "default_branch", nullable = false)
-    private String defaultBranch = "main";
+    private String defaultBranch;
 
     @Column(name = "created_at", updatable = false, nullable = false)
     private LocalDateTime createdAt;
@@ -34,13 +35,13 @@ public class Project {
     private LocalDateTime updatedAt;
 
     @PrePersist
-    protected void onCreate(){
+    protected void onCreate() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
 
     @PreUpdate
-    protected void onUpdate(){
+    protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
 }
