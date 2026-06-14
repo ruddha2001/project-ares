@@ -147,7 +147,8 @@ export async function resolveNotionTaskDescription(urlStr: string): Promise<stri
   let token = process.env.NOTION_TOKEN;
   if (!token) {
     try {
-      const envPath = path.resolve(process.cwd(), '.env');
+      const baseDir = process.env.ARES_WORKSPACE_PATH || process.cwd();
+      const envPath = path.resolve(baseDir, '.env');
       if (fs.existsSync(envPath)) {
         const envContent = fs.readFileSync(envPath, 'utf8');
         const match = envContent.match(/^NOTION_TOKEN\s*=\s*(.+)$/m);
