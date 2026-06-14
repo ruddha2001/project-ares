@@ -1,10 +1,12 @@
 import packageJson from '../package.json';
-import { PlanningSchema, VerificationSchema } from './types';
-import { handlePlanning } from './tools/planning';
+import { PlanningSchema, VerificationSchema, HarvestSchema } from './types/index.js';
+import { handlePlanning } from './tools/planning.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { handleVerification } from './tools/verification';
+import { handleVerification } from './tools/verification.js';
+import { handleHarvest } from './tools/harvest.js';
 import { getDatabase, runVerificationSuite } from './services/database.js';
+import { harvestWorkspace } from './services/harvester.js';
 
 const server = new McpServer({
   name: 'ares-mcp-server',
@@ -33,10 +35,27 @@ server.registerTool(
   handleVerification,
 );
 
+server.registerTool(
+  'ares_harvest',
+  {
+    title: 'Ares Harvest Tool',
+    description:
+      'Recursively scans the local project workspace, chunks the files, tracks uncommitted Git states, and updates vector embeddings in the local database',
+    inputSchema: HarvestSchema,
+  },
+  handleHarvest,
+);
+
 async function run() {
   console.error('[ARES-LOG] Booting Local SQLite Tier...');
   const db = getDatabase();
   runVerificationSuite(db);
+
+  // Start background non-blocking workspace harvest
+  console.error('[ARES-LOG] Initiating non-blocking background workspace harvest...');
+  harvestWorkspace(process.cwd()).catch((err) => {
+    console.error('[ARES-HARVESTER] Background harvest failed:', err);
+  });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -49,3 +68,4 @@ run().catch((err) => {
   console.error('[ARES-CRITICAL] Failed to execute modular MCP pipeline:', err);
   process.exit(1);
 });
+
