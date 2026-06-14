@@ -71,7 +71,8 @@ def execute_document_gauntlet(
     source_url: str,
     document_token: Optional[str] = None,
     github_token: Optional[str] = None,
-    copilot_model: Optional[str] = None,
+    copilot_embedding_model: Optional[str] = None,
+    copilot_llm_model: Optional[str] = None,
 ):
     logging.info(
         f"Starting authentic Document Ingestion for Job: {job_id} -> Target: {source_url}"
@@ -121,7 +122,7 @@ def execute_document_gauntlet(
                     embedding_vector = fetch_embedding(
                         chunk,
                         github_token=github_token,
-                        copilot_model=copilot_model,
+                        copilot_model=copilot_embedding_model,
                         model=doc_model
                     )
                     import uuid

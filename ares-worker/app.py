@@ -16,7 +16,8 @@ class CodebasePayload(BaseModel):
     repo_url: str
     default_branch: str
     github_token: Optional[str] = None
-    copilot_model: Optional[str] = None
+    copilot_embedding_model: Optional[str] = None
+    copilot_llm_model: Optional[str] = None
 
 
 class DocumentPayload(BaseModel):
@@ -26,12 +27,13 @@ class DocumentPayload(BaseModel):
     source_url: str
     document_token: Optional[str] = None
     github_token: Optional[str] = None
-    copilot_model: Optional[str] = None
+    copilot_embedding_model: Optional[str] = None
+    copilot_llm_model: Optional[str] = None
 
 class EmbeddingPayload(BaseModel):
     prompt: str
     github_token: Optional[str] = None
-    copilot_model: Optional[str] = None
+    copilot_embedding_model: Optional[str] = None
     is_code: Optional[bool] = True
 
 
@@ -44,7 +46,7 @@ def get_embeddings(payload: EmbeddingPayload):
         vector = fetch_embedding(
             payload.prompt,
             github_token=payload.github_token,
-            copilot_model=payload.copilot_model,
+            copilot_model=payload.copilot_embedding_model,
             model=model
         )
         return {"embedding": vector}
@@ -55,7 +57,7 @@ def get_embeddings(payload: EmbeddingPayload):
 class GeneratePayload(BaseModel):
     prompt: str
     github_token: Optional[str] = None
-    copilot_model: Optional[str] = None
+    copilot_llm_model: Optional[str] = None
 
 @app.post("/api/generate")
 def generate_text(payload: GeneratePayload):
@@ -64,7 +66,7 @@ def generate_text(payload: GeneratePayload):
         response_text = fetch_completion(
             payload.prompt,
             github_token=payload.github_token,
-            copilot_model=payload.copilot_model
+            copilot_model=payload.copilot_llm_model
         )
         return {"response": response_text}
     except Exception as e:
@@ -89,7 +91,8 @@ def trigger_codebase_ingestion(
         payload.repo_url,
         payload.default_branch,
         payload.github_token,
-        payload.copilot_model,
+        payload.copilot_embedding_model,
+        payload.copilot_llm_model,
     )
 
     return {"status": "PROCESSING", "job_id": payload.job_id}
@@ -112,7 +115,8 @@ def trigger_document_ingestion(
         payload.source_url,
         payload.document_token,
         payload.github_token,
-        payload.copilot_model,
+        payload.copilot_embedding_model,
+        payload.copilot_llm_model,
     )
 
     return {"status": "PROCESSING", "job_id": payload.job_id}

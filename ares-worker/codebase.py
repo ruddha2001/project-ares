@@ -17,7 +17,8 @@ def execute_codebase_gauntlet(
     repo_url: str,
     default_branch: str,
     github_token: Optional[str] = None,
-    copilot_model: Optional[str] = None,
+    copilot_embedding_model: Optional[str] = None,
+    copilot_llm_model: Optional[str] = None,
 ):
     workspace_dir = f"/tmp/ares_workspace_{job_id}/codebase"
     logging.info(f"Starting Codebase Gauntlet for Job {job_id} inside {workspace_dir}")
@@ -126,7 +127,7 @@ def execute_codebase_gauntlet(
                             embedding = fetch_api_embedding(
                                 chunk,
                                 github_token=github_token,
-                                copilot_model=copilot_model,
+                                copilot_model=copilot_embedding_model,
                                 model=code_model
                             )
                             import uuid
