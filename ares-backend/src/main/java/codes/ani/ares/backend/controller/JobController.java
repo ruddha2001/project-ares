@@ -1,5 +1,6 @@
 package codes.ani.ares.backend.controller;
 
+import codes.ani.ares.backend.dto.JobInitializationRequest;
 import codes.ani.ares.backend.model.AresJob;
 import codes.ani.ares.backend.model.JobStatus;
 import codes.ani.ares.backend.repository.AresJobRepository;
@@ -25,13 +26,29 @@ public class JobController {
     private final PlanningOrchestrationService planningOrchestrationService;
 
     @PostMapping
-    public ResponseEntity<AresJob> createJob(@RequestBody AresJob jobInitialArgs) {
-        return projectRepository.getByRepoUrl(jobInitialArgs.getRepoUrl()).map(project -> {
-            jobInitialArgs.setStatus(JobStatus.INITIALIZED);
-            jobInitialArgs.setCurrentTask("Workspace anchor established");
+    public ResponseEntity<AresJob> createJob(@RequestBody JobInitializationRequest request) {
+        String repoUrl = request.repositoryUrl();
+        return projectRepository.getByRepoUrl(repoUrl).map(project -> {
+            AresJob job = new AresJob();
+            job.setProjectId(project.getId());
+            job.setRepoUrl(repoUrl);
+            job.setStatus(JobStatus.INITIALIZED);
+            job.setCurrentTask("Workspace anchor established");
+            job.setTaskDescription(request.rawSpecificationText());
+            job.setGitDiff(request.localGitDiff());
+            job.setDocUrl(request.featureSpecUrl());
 
-            jobInitialArgs.setProjectId(project.getId());
-            AresJob saved = jobRepository.save(jobInitialArgs);
+            if (request.routingConfiguration() != null) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    String routingJson = mapper.writeValueAsString(request.routingConfiguration());
+                    job.setAuditMetadata(routingJson);
+                } catch (Exception e) {
+                    log.error("Failed to serialize routingConfiguration", e);
+                }
+            }
+
+            AresJob saved = jobRepository.save(job);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         })
                 .orElseGet(() -> ResponseEntity.notFound().build());

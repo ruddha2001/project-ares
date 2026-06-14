@@ -1,6 +1,6 @@
 import { execSync } from 'child_process';
 import { executeAresJobFlow } from '../services/api.js';
-import { resolveNotionTaskDescription } from '../services/notion.js';
+import { resolveNotionTaskDescription, isNotionUrl } from '../services/notion.js';
 
 function getLocalRepoUrl(): string | null {
   try {
@@ -18,6 +18,9 @@ export async function handlePlanning(args: any): Promise<any> {
   
   if (args.taskDescription) {
     try {
+      if (isNotionUrl(args.taskDescription)) {
+        args.featureSpecUrl = args.taskDescription;
+      }
       args.taskDescription = await resolveNotionTaskDescription(args.taskDescription);
     } catch (error: any) {
       console.error(`[ARES-TOOL] Failed to resolve Notion task description:`, error);

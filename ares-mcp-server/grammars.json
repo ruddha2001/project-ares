@@ -1,0 +1,17 @@
+{
+  "typescript": {
+    "npmPackage": "tree-sitter-typescript",
+    "extensions": [".ts", ".tsx", ".js", ".jsx"],
+    "languageAccessProperty": "tsx"
+  },
+  "java": {
+    "npmPackage": "tree-sitter-java",
+    "extensions": [".java"],
+    "languageAccessProperty": "default"
+  },
+  "python": {
+    "npmPackage": "tree-sitter-python",
+    "extensions": [".py"],
+    "languageAccessProperty": "default"
+  }
+}

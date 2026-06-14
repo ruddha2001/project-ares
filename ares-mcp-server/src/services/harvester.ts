@@ -88,10 +88,235 @@ export function parseGitignore(gitignorePath: string): string[] {
   }
 }
 
-/**
- * Generates overlapping text chunks on line boundaries.
- */
-export function chunkText(text: string, maxChunkCharLength = 2000, overlapRatio = 0.1): string[] {
+let Parser: any;
+const loadedLanguages = new Map<string, any>();
+const activeCodebaseExtensions = new Set<string>();
+let isTreeSitterInitialized = false;
+
+export function initTreeSitter() {
+  if (isTreeSitterInitialized) return;
+  
+  try {
+    Parser = import.meta.require('tree-sitter');
+  } catch (err: any) {
+    throw new Error(`[ARES-HARVESTER] Critical Error: Failed to load native 'tree-sitter' bindings: ${err.message}`);
+  }
+
+  const supportedGrammarsEnv = process.env.SUPPORTED_GRAMMARS;
+  if (!supportedGrammarsEnv) {
+    throw new Error("[ARES-HARVESTER] Critical Error: Environment variable 'SUPPORTED_GRAMMARS' is not configured.");
+  }
+
+  const configPath = path.resolve(import.meta.dir, '../../grammars.json');
+  if (!fs.existsSync(configPath)) {
+    throw new Error(`[ARES-HARVESTER] Critical Error: Grammars config file not found at ${configPath}`);
+  }
+
+  let config: Record<string, { npmPackage: string; extensions: string[]; languageAccessProperty: string }>;
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (err: any) {
+    throw new Error(`[ARES-HARVESTER] Critical Error: Failed to parse grammars config file: ${err.message}`);
+  }
+
+  const supportedList = supportedGrammarsEnv
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+
+  for (const langName of supportedList) {
+    const grammarConfig = config[langName];
+    if (!grammarConfig) {
+      throw new Error(`[ARES-HARVESTER] Critical Error: Grammar '${langName}' is configured in SUPPORTED_GRAMMARS but not found in grammars.json.`);
+    }
+
+    try {
+      const pkg = import.meta.require(grammarConfig.npmPackage);
+      let lang: any;
+      const prop = grammarConfig.languageAccessProperty;
+      if (prop === 'default') {
+        lang = pkg.default || pkg;
+      } else if (prop) {
+        lang = pkg[prop] || pkg;
+      } else {
+        lang = pkg;
+      }
+
+      if (!lang) {
+        throw new Error(`Grammar package did not export language under property '${prop}'`);
+      }
+
+      for (const ext of grammarConfig.extensions) {
+        loadedLanguages.set(ext, lang);
+        activeCodebaseExtensions.add(ext);
+      }
+      console.error(`[ARES-HARVESTER] Successfully loaded grammar package '${grammarConfig.npmPackage}' for ${langName}.`);
+    } catch (err: any) {
+      throw new Error(`[ARES-HARVESTER] Critical Error: Failed to load configured grammar package '${grammarConfig.npmPackage}': ${err.message}`);
+    }
+  }
+
+  isTreeSitterInitialized = true;
+}
+
+function getBoundaryCrossingCounts(
+  rootNode: any,
+  lineCount: number,
+  maxDepth = 15
+): number[] {
+  const crossingCounts = new Array(lineCount).fill(0);
+
+  const structuralTypes = new Set([
+    'class_declaration',
+    'method_definition',
+    'function_declaration',
+    'interface_declaration',
+    'type_alias_declaration',
+    'enum_declaration',
+    'arrow_function',
+    'lexical_declaration',
+    'export_statement',
+    'export_declaration',
+    'class_declaration',
+    'interface_declaration',
+    'method_declaration',
+    'constructor_declaration',
+    'record_declaration',
+    'enum_declaration',
+    'class_definition',
+    'function_definition',
+  ]);
+
+  const stack: { node: any; depth: number }[] = [{ node: rootNode, depth: 0 }];
+
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop()!;
+    if (!node) continue;
+    if (depth > maxDepth) continue;
+
+    const isStructural = structuralTypes.has(node.type);
+    if (isStructural) {
+      const startLine = node.startPosition.row;
+      const endLine = node.endPosition.row;
+      for (let i = startLine; i < endLine; i++) {
+        if (i >= 0 && i < lineCount) {
+          crossingCounts[i]++;
+        }
+      }
+    }
+
+    const childCount = node.childCount;
+    for (let i = 0; i < childCount; i++) {
+      const child = node.child(i);
+      if (child) {
+        stack.push({ node: child, depth: depth + 1 });
+      }
+    }
+  }
+
+  return crossingCounts;
+}
+
+function chunkTextAST(
+  text: string,
+  lang: any,
+  maxChunkCharLength = 2000,
+  overlapRatio = 0.1
+): string[] {
+  const parser = new Parser();
+  parser.setLanguage(lang);
+  const tree = parser.parse(text);
+  const rootNode = tree.rootNode;
+
+  const lines = text.split('\n');
+  const lineCount = lines.length;
+  const crossingCounts = getBoundaryCrossingCounts(rootNode, lineCount);
+
+  const chunks: string[] = [];
+  const overlapTarget = Math.floor(maxChunkCharLength * overlapRatio);
+
+  let currentLineIdx = 0;
+
+  while (currentLineIdx < lineCount) {
+    let limitLineIdx = currentLineIdx;
+    let currentLength = 0;
+
+    while (limitLineIdx < lineCount) {
+      const lineLen = lines[limitLineIdx].length + 1;
+      if (currentLength + lineLen > maxChunkCharLength) {
+        break;
+      }
+      currentLength += lineLen;
+      limitLineIdx++;
+    }
+
+    if (limitLineIdx === currentLineIdx) {
+      limitLineIdx = currentLineIdx + 1;
+    }
+
+    if (limitLineIdx >= lineCount) {
+      const chunkText = lines.slice(currentLineIdx, lineCount).join('\n');
+      if (chunkText.trim().length > 0) {
+        chunks.push(chunkText);
+      }
+      break;
+    }
+
+    const chunkLinesCount = limitLineIdx - currentLineIdx;
+    const windowSize = Math.max(5, Math.floor(chunkLinesCount * 0.3));
+    const windowStart = Math.max(currentLineIdx, limitLineIdx - windowSize);
+
+    let bestSplitIdx = limitLineIdx - 1;
+    let minCrossing = Infinity;
+
+    for (let i = windowStart; i < limitLineIdx; i++) {
+      const crossing = crossingCounts[i];
+      if (crossing < minCrossing || (crossing === minCrossing && i > bestSplitIdx)) {
+        minCrossing = crossing;
+        bestSplitIdx = i;
+      }
+    }
+
+    const chunkText = lines.slice(currentLineIdx, bestSplitIdx + 1).join('\n');
+    if (chunkText.trim().length > 0) {
+      chunks.push(chunkText);
+    }
+
+    if (overlapRatio > 0) {
+      let overlapLen = 0;
+      let j = bestSplitIdx;
+      while (j > currentLineIdx && overlapLen < overlapTarget) {
+        overlapLen += lines[j].length + 1;
+        j--;
+      }
+      
+      const overlapWindowStart = Math.max(currentLineIdx + 1, j - 2);
+      const overlapWindowEnd = Math.min(bestSplitIdx, j + 2);
+      let bestOverlapStart = bestSplitIdx;
+      let minOverlapCrossing = Infinity;
+
+      for (let k = overlapWindowStart; k <= overlapWindowEnd; k++) {
+        const crossing = crossingCounts[k - 1];
+        if (crossing < minOverlapCrossing || (crossing === minOverlapCrossing && k < bestOverlapStart)) {
+          minOverlapCrossing = crossing;
+          bestOverlapStart = k;
+        }
+      }
+
+      currentLineIdx = bestOverlapStart;
+    } else {
+      currentLineIdx = bestSplitIdx + 1;
+    }
+  }
+
+  return chunks;
+}
+
+export function chunkTextLineFallback(
+  text: string,
+  maxChunkCharLength = 2000,
+  overlapRatio = 0.1
+): string[] {
   const lines = text.split('\n');
   const chunks: string[] = [];
   const overlapTarget = Math.floor(maxChunkCharLength * overlapRatio);
@@ -147,6 +372,36 @@ export function chunkText(text: string, maxChunkCharLength = 2000, overlapRatio 
 
   return chunks.filter(c => c.trim().length > 0);
 }
+
+/**
+ * Generates overlapping text chunks on line boundaries or AST boundaries.
+ */
+export function chunkText(
+  text: string,
+  maxChunkCharLength = 2000,
+  overlapRatio = 0.1,
+  filePath?: string
+): string[] {
+  const ext = filePath ? path.extname(filePath).toLowerCase() : '';
+  
+  initTreeSitter();
+
+  const isCodebaseFile = ext && activeCodebaseExtensions.has(ext);
+
+  if (isCodebaseFile) {
+    if (!Parser) {
+      throw new Error(`[ARES-HARVESTER] Critical Error: Tree-sitter parser not initialized for codebase file: ${filePath}`);
+    }
+    const lang = loadedLanguages.get(ext);
+    if (!lang) {
+      throw new Error(`[ARES-HARVESTER] Critical Error: Tree-sitter grammar not loaded for extension '${ext}' of codebase file: ${filePath}`);
+    }
+    return chunkTextAST(text, lang, maxChunkCharLength, overlapRatio);
+  } else {
+    return chunkTextLineFallback(text, maxChunkCharLength, overlapRatio);
+  }
+}
+
 
 /**
  * Queries Git CLI to retrieve the uncommitted diff.
@@ -343,6 +598,7 @@ export async function harvestWorkspace(
 ): Promise<{ filesProcessed: number; chunksInserted: number; elapsedMs: number }> {
   const startTime = Date.now();
   loadEnvironments(workspacePath);
+  initTreeSitter();
 
   console.error(`[ARES-HARVESTER] Beginning workspace harvesting for ${workspacePath}...`);
 
@@ -492,7 +748,7 @@ export async function harvestWorkspace(
   for (const file of filesToReindex) {
     try {
       const content = fs.readFileSync(file.absolutePath, 'utf8');
-      const chunks = chunkText(content, 2000, 0.1);
+      const chunks = chunkText(content, 2000, 0.1, file.relativePath);
       if (chunks.length === 0) continue;
 
       const chunksWithEmbeddings = await parallelLimit(
