@@ -30,6 +30,10 @@ export function loadEnvironments(workspacePath: string): void {
   const envsToLoad = [
     path.resolve(workspacePath, '.env'),
     path.resolve(workspacePath, 'ares-mcp-server', '.env'),
+    ...(process.env.ARES_WORKSPACE_PATH ? [
+      path.resolve(process.env.ARES_WORKSPACE_PATH, '.env'),
+      path.resolve(process.env.ARES_WORKSPACE_PATH, 'ares-mcp-server', '.env'),
+    ] : []),
     path.resolve(process.cwd(), '.env'),
     path.resolve(process.cwd(), 'ares-mcp-server', '.env'),
   ];
@@ -48,7 +52,9 @@ export function loadEnvironments(workspacePath: string): void {
             if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
               val = val.slice(1, -1);
             }
-            process.env[key] = val;
+            if (!(key in process.env) || key === 'ARES_WORKSPACE_PATH') {
+              process.env[key] = val;
+            }
           }
         }
       } catch (e) {
@@ -646,6 +652,7 @@ export async function harvestWorkspace(
     '**/node_modules/**',
     '**/.git/**',
     '**/.gitignore',
+    '**/.ares/**',
     '**/dist/**',
     '**/build/**',
     '**/target/**',
