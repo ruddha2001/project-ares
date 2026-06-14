@@ -11,6 +11,10 @@ export function getDatabasePath(): string {
   if (process.env.ARES_DB_PATH) {
     return process.env.ARES_DB_PATH;
   }
+  const workspacePath = process.env.ARES_WORKSPACE_PATH;
+  if (workspacePath) {
+    return path.join(workspacePath, '.ares', 'local_context.db');
+  }
   const homedir = os.homedir();
   return path.join(homedir, '.config', 'ares', 'local_context.db');
 }
