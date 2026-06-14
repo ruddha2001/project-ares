@@ -32,16 +32,20 @@ class EmbeddingPayload(BaseModel):
     prompt: str
     github_token: Optional[str] = None
     copilot_model: Optional[str] = None
+    is_code: Optional[bool] = True
 
 
 @app.post("/api/embeddings")
 def get_embeddings(payload: EmbeddingPayload):
     try:
+        import os
         from embeddings import fetch_embedding
+        model = os.environ.get("CODE_EMBEDDING_MODEL", "nomic-embed-text") if payload.is_code else os.environ.get("DOC_EMBEDDING_MODEL", "bge-m3")
         vector = fetch_embedding(
             payload.prompt,
             github_token=payload.github_token,
-            copilot_model=payload.copilot_model
+            copilot_model=payload.copilot_model,
+            model=model
         )
         return {"embedding": vector}
     except Exception as e:

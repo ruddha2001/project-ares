@@ -102,7 +102,7 @@ export function initializeDatabase(): Database {
       file_path TEXT,
       file_hash TEXT,
       content_chunk TEXT,
-      embedding FLOAT[1536]
+      embedding FLOAT[768]
     );
   `);
   
@@ -122,12 +122,12 @@ export function runVerificationSuite(db: Database): void {
   const mockFileHash = 'mockhash12345';
   const mockContentChunk = 'This is a mock text chunk for verifying local vector similarity queries.';
   
-  // Create a 1536-dimension float array (all zeros except first dimension)
-  const vecA = new Float32Array(1536);
+  // Create a 768-dimension float array (all zeros except first dimension)
+  const vecA = new Float32Array(768);
   vecA[0] = 1.0;
   
-  // Another 1536-dimension vector slightly different (60 degrees angle)
-  const vecB = new Float32Array(1536);
+  // Another 768-dimension vector slightly different (60 degrees angle)
+  const vecB = new Float32Array(768);
   vecB[0] = 0.5;
   vecB[1] = 0.866;
   

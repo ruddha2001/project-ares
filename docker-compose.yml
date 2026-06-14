@@ -36,7 +36,8 @@ services:
       "ollama serve & 
        sleep 5; 
        echo '🚀 [ARES-INFRA] Pre-warming embedding weights...'; 
-       ollama pull nomic-embed-text; 
+       ollama pull ${CODE_EMBEDDING_MODEL:-nomic-embed-text}; 
+       ollama pull ${DOC_EMBEDDING_MODEL:-bge-m3}; 
        echo '🏆 [ARES-INFRA] Model pinned to VRAM. Standby ready.'; 
        wait"
     deploy:
@@ -79,6 +80,8 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - INFERENCE_URL=${INFERENCE_URL}
       - COPILOT_MODEL=${COPILOT_MODEL}
+      - CODE_EMBEDDING_MODEL=${CODE_EMBEDDING_MODEL:-nomic-embed-text}
+      - DOC_EMBEDDING_MODEL=${DOC_EMBEDDING_MODEL:-bge-m3}
     ports:
       - "8000:8000"
     networks:

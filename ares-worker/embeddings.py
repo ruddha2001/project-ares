@@ -3,9 +3,9 @@ import re
 import json
 import logging
 import subprocess
-from typing import List, Optional
+from typing import Any, List, Optional
 
-def normalize_vector(vector: List[float], target_dim: int = 768) -> List[float]:
+def normalize_vector(vector: List[float], target_dim: int = 1024) -> List[float]:
     if len(vector) < target_dim:
         return vector + [0.0] * (target_dim - len(vector))
     elif len(vector) > target_dim:
@@ -15,7 +15,8 @@ def normalize_vector(vector: List[float], target_dim: int = 768) -> List[float]:
 def fetch_embedding(
     text: str,
     github_token: Optional[str] = None,
-    copilot_model: Optional[str] = None
+    copilot_model: Optional[str] = None,
+    model: Optional[str] = None
 ) -> List[float]:
     """
     If copilot_model is provided, query it via the Copilot CLI.
@@ -27,7 +28,7 @@ def fetch_embedding(
         if not token:
             raise ValueError("GitHub token is required to invoke Copilot CLI embeddings inside the container.")
 
-        # Instruct model to return 20 float values representing semantic properties, which we pad to 768.
+        # Instruct model to return 20 float values representing semantic properties, which we pad to target_dim.
         # This avoids using the phrase 'embedding vector' which triggers safety refusals in agentic LLMs.
         prompt = (
             "Generate exactly 20 random float values between -1.0 and 1.0 representing the semantic properties of the text below. "
@@ -70,7 +71,7 @@ def fetch_embedding(
             try:
                 vector = json.loads(output)
                 if isinstance(vector, list):
-                    return normalize_vector([float(x) for x in vector])
+                    return normalize_vector([float(x) for x in vector], 1024)
             except Exception:
                 pass
                 
@@ -78,7 +79,7 @@ def fetch_embedding(
             match = re.search(r"\[([\d\s\.,eE+-]+)\]", output)
             if match:
                 nums = [float(x.strip()) for x in match.group(1).split(",") if x.strip()]
-                return normalize_vector(nums)
+                return normalize_vector(nums, 1024)
                 
             raise ValueError(f"Could not parse valid vector from output: {output[:200]}")
             
@@ -89,19 +90,35 @@ def fetch_embedding(
     else:
         # Default to local Ollama
         ollama_url = os.environ.get("INFERENCE_URL", "http://inference-sidecar:11434")
-        endpoint = f"{ollama_url.rstrip('/')}/api/embeddings"
-        payload = {"model": "nomic-embed-text", "prompt": text}
+        final_model = model or os.environ.get("CODE_EMBEDDING_MODEL", "nomic-embed-text")
         
-        try:
-            import httpx
-            with httpx.Client(timeout=30.0) as client:
-                response = client.post(endpoint, json=payload)
+        import httpx
+        with httpx.Client(timeout=30.0) as client:
+            try:
+                # Try newer /api/embed endpoint
+                embed_endpoint = f"{ollama_url.rstrip('/')}/api/embed"
+                embed_payload: dict[str, Any] = {"model": final_model, "input": text}
+                if "qwen" in final_model.lower():
+                    embed_payload["dimensions"] = 1024
+                    
+                response = client.post(embed_endpoint, json=embed_payload)
+                if response.status_code == 200:
+                    vector = response.json()["embeddings"][0]
+                    return normalize_vector(vector, 1024)
+            except Exception as e:
+                logging.warning(f"Newer /api/embed endpoint failed: {str(e)}. Falling back to /api/embeddings...")
+                
+            try:
+                # Fallback to older /api/embeddings
+                embeddings_endpoint = f"{ollama_url.rstrip('/')}/api/embeddings"
+                embeddings_payload = {"model": final_model, "prompt": text}
+                response = client.post(embeddings_endpoint, json=embeddings_payload)
                 response.raise_for_status()
                 vector = response.json()["embedding"]
-                return normalize_vector(vector)
-        except Exception as e:
-            logging.error(f"Failed to fetch embedding from local Ollama at {endpoint}: {e}")
-            raise RuntimeError("Local Ollama embedding inference failed.") from e
+                return normalize_vector(vector, 1024)
+            except Exception as e:
+                logging.error(f"Failed to fetch embedding from local Ollama: {e}")
+                raise RuntimeError("Local Ollama embedding inference failed.") from e
 
 def fetch_completion(
     prompt: str,
