@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { execSync } from 'child_process';
 import glob from 'fast-glob';
 import { getDatabase } from './database.js';
@@ -17,11 +16,11 @@ export function normalizeVector(vector: number[], targetDim = 768): Float32Array
 }
 
 /**
- * Computes the SHA-256 hash of a string.
+ * Computes a high-performance hash of a string using Bun's native Wyhash implementation.
+ * Faster execution footprint for high-frequency workspace drift checks.
  */
 export function computeHash(content: string): string {
-  const crypto = require('crypto');
-  return crypto.createHash('sha256').update(content).digest('hex');
+  return Bun.hash(content).toString(16);
 }
 
 /**
@@ -819,32 +818,43 @@ export async function harvestWorkspace(
     VALUES (?, ?, ?, ?, ?)
   `);
 
-  const dbTx = db.transaction(() => {
-    // Delete missing files
-    for (const filePath of deletedPaths) {
-      deleteStmt.run(filePath);
-    }
-
-    // Insert re-indexed files
-    for (const file of fileIndexData) {
-      deleteStmt.run(file.filePath);
-      for (const chunk of file.chunks) {
-        insertStmt.run(chunk.chunkId, file.filePath, file.fileHash, chunk.contentChunk, chunk.embedding);
-        totalChunksInserted++;
+  // Transaction for deleting missing files
+  if (deletedPaths.length > 0) {
+    const deleteTx = db.transaction(() => {
+      for (const filePath of deletedPaths) {
+        deleteStmt.run(filePath);
       }
-    }
+    });
+    deleteTx();
+  }
 
-    // Insert git-diff chunks if any
-    if (diffFileIndexData) {
+  // Transaction for batching re-indexed files (50 files per batch) to avoid exclusive database lock starvations
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < fileIndexData.length; i += BATCH_SIZE) {
+    const batch = fileIndexData.slice(i, i + BATCH_SIZE);
+    const writeBatchTx = db.transaction(() => {
+      for (const file of batch) {
+        deleteStmt.run(file.filePath);
+        for (const chunk of file.chunks) {
+          insertStmt.run(chunk.chunkId, file.filePath, file.fileHash, chunk.contentChunk, chunk.embedding);
+          totalChunksInserted++;
+        }
+      }
+    });
+    writeBatchTx();
+  }
+
+  // Transaction for git-diff chunks
+  if (diffFileIndexData) {
+    const diffTx = db.transaction(() => {
       deleteStmt.run('git-diff');
       for (const chunk of diffFileIndexData.chunks) {
         insertStmt.run(chunk.chunkId, 'git-diff', diffFileIndexData.fileHash, chunk.contentChunk, chunk.embedding);
         totalChunksInserted++;
       }
-    }
-  });
-
-  dbTx();
+    });
+    diffTx();
+  }
 
   const elapsedMs = Date.now() - startTime;
   console.error(`[ARES-HARVESTER] Successfully indexed workspace in ${elapsedMs}ms. Added/Updated ${filesToReindex.length} files (${totalChunksInserted} chunks).`);
