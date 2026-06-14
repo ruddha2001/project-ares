@@ -21,6 +21,13 @@ export async function executeAresJobFlow(
     const token = process.env.COPILOT_GITHUB_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_TOKEN || '';
     const copilotModel = process.env.COPILOT_MODEL || '';
 
+    const routingConfiguration = {
+      EMBEDDING_GENERATION: process.env.EMBEDDING_GENERATION || 'ollama',
+      KNOWLEDGE_RETRIEVAL_RANKING: process.env.KNOWLEDGE_RETRIEVAL_RANKING || 'ollama',
+      COMPLIANCE_EVALUATION: process.env.COMPLIANCE_EVALUATION || 'gemini-flash-3.5',
+      PR_SYNTHESIS: process.env.PR_SYNTHESIS || 'claude-opus-4.6',
+    };
+
     const initResponse = await fetch(`${BACKEND_URL}/api/v1/jobs`, {
       method: 'POST',
       headers: {
@@ -30,9 +37,11 @@ export async function executeAresJobFlow(
       },
       body: JSON.stringify({
         projectId: payload.projectId || null,
-        repoUrl: payload.repoUrl || null,
-        taskDescription: payload.taskDescription || null,
-        gitDiff: payload.gitDiff || null,
+        repositoryUrl: payload.repoUrl || null,
+        featureSpecUrl: payload.featureSpecUrl || null,
+        rawSpecificationText: payload.taskDescription || null,
+        localGitDiff: payload.gitDiff || null,
+        routingConfiguration,
       }),
     });
 

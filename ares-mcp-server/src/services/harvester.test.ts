@@ -5,6 +5,7 @@ import os from 'os';
 
 // Configure isolated test database
 process.env.ARES_DB_PATH = path.join(os.tmpdir(), `ares-harvester-db-${Date.now()}-${Math.random()}.db`);
+process.env.SUPPORTED_GRAMMARS = 'typescript,java,python';
 
 import { execSync } from 'child_process';
 import {
@@ -176,6 +177,79 @@ describe('Workspace Harvester Engine Tests', () => {
       global.fetch = originalFetch;
       if (oldCopilot) process.env.COPILOT_MODEL = oldCopilot;
       if (oldInference) process.env.INFERENCE_URL = oldInference;
+    }
+  });
+
+  test('AST chunking splits TypeScript files along structural boundaries', () => {
+    const tsCode = `import { foo } from 'bar';
+
+export class MyService {
+  constructor() {
+    console.log("init");
+  }
+
+  async processTask(id: string): Promise<void> {
+    console.log("processing task", id);
+    if (id) {
+      await this.save(id);
+    }
+  }
+
+  private async save(id: string): Promise<void> {
+    // save implementation
+    console.log("saving task", id);
+  }
+}`;
+
+    const chunks = chunkText(tsCode, 150, 0.1, 'service.ts');
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.split('\n').length).toBeGreaterThan(0);
+      expect(tsCode).toContain(chunk);
+    }
+  });
+
+  test('AST chunking splits Java files along method boundaries', () => {
+    const javaCode = `package codes.ani.ares;
+
+public class TaskProcessor {
+    public TaskProcessor() {
+        System.out.println("init");
+    }
+
+    public void process(String task) {
+        System.out.println("Processing: " + task);
+    }
+
+    private void save(String task) {
+        System.out.println("Saved: " + task);
+    }
+}`;
+
+    const chunks = chunkText(javaCode, 120, 0.1, 'TaskProcessor.java');
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(javaCode).toContain(chunk);
+    }
+  });
+
+  test('AST chunking splits Python files along function definitions', () => {
+    const pythonCode = `def add(a, b):
+    return a + b
+
+def subtract(a, b):
+    # subtract logic
+    return a - b
+
+class Calculator:
+    def __init__(self):
+        pass
+`;
+
+    const chunks = chunkText(pythonCode, 100, 0.1, 'calc.py');
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(pythonCode).toContain(chunk);
     }
   });
 });
