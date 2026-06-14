@@ -50,6 +50,15 @@ public class AresJob {
     @Column(name = "payload", columnDefinition = "TEXT")
     private String payload;
 
+    @Column(name = "github_pat", length = 512)
+    private String githubPat;
+
+    @Column(name = "notion_token", length = 512)
+    private String notionToken;
+
+    @Column(name = "audit_metadata", columnDefinition = "TEXT")
+    private String auditMetadata;
+
     @Column(name = "created_at", updatable = false, nullable = false)
     private LocalDateTime createdAt;
 
