@@ -60,10 +60,10 @@ describe('Workspace Harvester Engine Tests', () => {
     expect(truncated[767]).toBe(0.5);
   });
 
-  test('computeHash returns correct SHA-256 string', () => {
+  test('computeHash returns correct high-performance hash string', () => {
     const content = 'test content';
     const hash = computeHash(content);
-    expect(hash).toBe('6ae8a75555209fd6c44157c0aed8016e763ff435a19cf186f76863140143ff72');
+    expect(hash).toBe('8142647cc7ddf702');
   });
 
   test('parseGitignore parses patterns correctly', () => {

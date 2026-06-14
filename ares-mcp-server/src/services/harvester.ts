@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { execSync } from 'child_process';
 import glob from 'fast-glob';
 import { getDatabase } from './database.js';
@@ -17,11 +16,11 @@ export function normalizeVector(vector: number[], targetDim = 768): Float32Array
 }
 
 /**
- * Computes the SHA-256 hash of a string.
+ * Computes a high-performance hash of a string using Bun's native Wyhash implementation.
+ * Faster execution footprint for high-frequency workspace drift checks.
  */
 export function computeHash(content: string): string {
-  const crypto = require('crypto');
-  return crypto.createHash('sha256').update(content).digest('hex');
+  return Bun.hash(content).toString(16);
 }
 
 /**
