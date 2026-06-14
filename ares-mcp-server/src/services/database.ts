@@ -8,6 +8,9 @@ import fs from 'fs';
  * Dynamically resolves the database file path across operating systems.
  */
 export function getDatabasePath(): string {
+  if (process.env.ARES_DB_PATH) {
+    return process.env.ARES_DB_PATH;
+  }
   const homedir = os.homedir();
   return path.join(homedir, '.config', 'ares', 'local_context.db');
 }
