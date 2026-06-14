@@ -47,7 +47,7 @@ public class BaselineController {
     @PostMapping("/project")
     public ResponseEntity<Map<String, String>> registerProject(
             @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
-            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel,
+            @RequestHeader(value = "X-ARES-COPILOT-EMBEDDING-MODEL", required = false) String copilotEmbeddingModel,
             @Valid @RequestBody ProjectRegistrationDTO projectDTO){
         Project project = Project.builder()
                 .name(projectDTO.name())
@@ -64,7 +64,7 @@ public class BaselineController {
                 .build();
         AresJob savedJob = jobRepository.save(job);
 
-        ingestionWebhookService.triggerCodebaseIngestion(savedJob.getJobId(), savedProject, githubToken, copilotModel);
+        ingestionWebhookService.triggerCodebaseIngestion(savedJob.getJobId(), savedProject, githubToken, copilotEmbeddingModel);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "status", savedJob.getStatus().toString(),
@@ -77,7 +77,7 @@ public class BaselineController {
     public ResponseEntity<Map<String, String>> injectDocument(
             @RequestHeader(value = "X-ARES-NOTION-TOKEN", required = false) String notionHeaderToken,
             @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
-            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel,
+            @RequestHeader(value = "X-ARES-COPILOT-EMBEDDING-MODEL", required = false) String copilotEmbeddingModel,
             @Valid @RequestBody ManualDocIngestionDTO docDTO) {
         if (!projectRepository.existsById(docDTO.projectId())) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
@@ -95,7 +95,7 @@ public class BaselineController {
                 .build();
         AresJob savedJob = jobRepository.save(job);
 
-        ingestionWebhookService.triggerDocumentIngestion(savedJob.getJobId(), docDTO, effectiveToken, githubToken, copilotModel);
+        ingestionWebhookService.triggerDocumentIngestion(savedJob.getJobId(), docDTO, effectiveToken, githubToken, copilotEmbeddingModel);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
                 "status", savedJob.getStatus().toString(),

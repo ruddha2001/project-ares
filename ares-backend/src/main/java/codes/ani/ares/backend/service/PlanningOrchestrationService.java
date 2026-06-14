@@ -24,8 +24,11 @@ public class PlanningOrchestrationService {
     private final RestClient.Builder restClientBuilder;
     private RestClient ollamaClient;
 
-    @Value("${COPILOT_MODEL:}")
-    private String copilotModel;
+    @Value("${COPILOT_EMBEDDING_MODEL:}")
+    private String copilotEmbeddingModel;
+
+    @Value("${COPILOT_LLM_MODEL:}")
+    private String copilotLlmModel;
 
     @Value("${GITHUB_PAT:}")
     private String githubPat;
@@ -43,11 +46,11 @@ public class PlanningOrchestrationService {
     }
 
     @SuppressWarnings("unchecked")
-    public String getEmbedding(String textPrompt, String effectiveGithubToken, String effectiveCopilotModel, boolean isCode) {
+    public String getEmbedding(String textPrompt, String effectiveGithubToken, String effectiveCopilotEmbeddingModel, boolean isCode) {
         String responseStr;
-        String finalModel = (effectiveCopilotModel != null && !effectiveCopilotModel.trim().isEmpty())
-                ? effectiveCopilotModel
-                : this.copilotModel;
+        String finalModel = (effectiveCopilotEmbeddingModel != null && !effectiveCopilotEmbeddingModel.trim().isEmpty())
+                ? effectiveCopilotEmbeddingModel
+                : this.copilotEmbeddingModel;
         String finalToken = (effectiveGithubToken != null && !effectiveGithubToken.trim().isEmpty())
                 ? effectiveGithubToken
                 : this.githubPat;
@@ -58,7 +61,7 @@ public class PlanningOrchestrationService {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of(
                         "prompt", textPrompt,
-                        "copilot_model", finalModel,
+                        "copilot_embedding_model", finalModel != null ? finalModel : "",
                         "github_token", finalToken,
                         "is_code", isCode))
                 .retrieve()
@@ -85,10 +88,10 @@ public class PlanningOrchestrationService {
     }
 
     public String compileLibrarianContextPayload(UUID projectId, String textPrompt, String effectiveGithubToken,
-            String effectiveCopilotModel) {
+            String effectiveCopilotEmbeddingModel) {
         // 1. Generate real prompt embedding vectors
-        String codebaseVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotModel, true);
-        String docVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotModel, false);
+        String codebaseVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotEmbeddingModel, true);
+        String docVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotEmbeddingModel, false);
 
         // 2. Perform parallelized two-tiered searches
         List<KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(projectId, codebaseVectorString, 5);
@@ -118,9 +121,9 @@ public class PlanningOrchestrationService {
     }
 
     public Map<String, Object> executePlanning(UUID projectId, String textPrompt, String effectiveGithubToken,
-            String effectiveCopilotModel) {
-        String codebaseVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotModel, true);
-        String docVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotModel, false);
+            String effectiveCopilotEmbeddingModel) {
+        String codebaseVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotEmbeddingModel, true);
+        String docVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotEmbeddingModel, false);
         List<KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(projectId, codebaseVectorString, 5);
         List<KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(projectId, docVectorString, 5);
 
@@ -149,9 +152,9 @@ public class PlanningOrchestrationService {
     }
 
     public Map<String, Object> executeVerification(UUID projectId, String gitDiff, String effectiveGithubToken,
-            String effectiveCopilotModel) {
-        String codebaseVectorString = getEmbedding(gitDiff, effectiveGithubToken, effectiveCopilotModel, true);
-        String docVectorString = getEmbedding(gitDiff, effectiveGithubToken, effectiveCopilotModel, false);
+            String effectiveCopilotEmbeddingModel) {
+        String codebaseVectorString = getEmbedding(gitDiff, effectiveGithubToken, effectiveCopilotEmbeddingModel, true);
+        String docVectorString = getEmbedding(gitDiff, effectiveGithubToken, effectiveCopilotEmbeddingModel, false);
         List<KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(projectId, codebaseVectorString, 5);
         List<KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(projectId, docVectorString, 5);
 
@@ -176,11 +179,11 @@ public class PlanningOrchestrationService {
                 "documentMatches", documentMatches);
     }
 
-    public String generateText(String prompt, String effectiveGithubToken, String effectiveCopilotModel) {
+    public String generateText(String prompt, String effectiveGithubToken, String effectiveCopilotLlmModel) {
         String responseStr;
-        String finalModel = (effectiveCopilotModel != null && !effectiveCopilotModel.trim().isEmpty())
-                ? effectiveCopilotModel
-                : this.copilotModel;
+        String finalModel = (effectiveCopilotLlmModel != null && !effectiveCopilotLlmModel.trim().isEmpty())
+                ? effectiveCopilotLlmModel
+                : this.copilotLlmModel;
         String finalToken = (effectiveGithubToken != null && !effectiveGithubToken.trim().isEmpty())
                 ? effectiveGithubToken
                 : this.githubPat;
@@ -191,7 +194,7 @@ public class PlanningOrchestrationService {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of(
                         "prompt", prompt,
-                        "copilot_model", finalModel,
+                        "copilot_llm_model", finalModel != null ? finalModel : "",
                         "github_token", finalToken))
                 .retrieve()
                 .body(String.class);
