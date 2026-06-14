@@ -19,7 +19,8 @@ export async function executeAresJobFlow(
     }
 
     const token = process.env.COPILOT_GITHUB_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_TOKEN || '';
-    const copilotModel = process.env.COPILOT_MODEL || '';
+    const copilotLlmModel = process.env.COPILOT_LLM_MODEL || '';
+    const copilotEmbeddingModel = process.env.COPILOT_EMBEDDING_MODEL || '';
 
     const routingConfiguration = {
       EMBEDDING_GENERATION: process.env.EMBEDDING_GENERATION || 'ollama',
@@ -33,7 +34,8 @@ export async function executeAresJobFlow(
       headers: {
         'Content-Type': 'application/json',
         'X-ARES-GH-PAT': token,
-        ...(copilotModel ? { 'X-ARES-COPILOT-MODEL': copilotModel } : {}),
+        ...(copilotLlmModel ? { 'X-ARES-COPILOT-LLM-MODEL': copilotLlmModel } : {}),
+        ...(copilotEmbeddingModel ? { 'X-ARES-COPILOT-EMBEDDING-MODEL': copilotEmbeddingModel } : {}),
       },
       body: JSON.stringify({
         projectId: payload.projectId || null,
@@ -65,7 +67,8 @@ export async function executeAresJobFlow(
         headers: {
           'Content-Length': '0',
           'X-ARES-GH-PAT': token,
-          ...(copilotModel ? { 'X-ARES-COPILOT-MODEL': copilotModel } : {}),
+          ...(copilotLlmModel ? { 'X-ARES-COPILOT-LLM-MODEL': copilotLlmModel } : {}),
+          ...(copilotEmbeddingModel ? { 'X-ARES-COPILOT-EMBEDDING-MODEL': copilotEmbeddingModel } : {}),
         },
       },
     );
@@ -86,7 +89,8 @@ export async function executeAresJobFlow(
       const pollResponse = await fetch(`${BACKEND_URL}/api/v1/jobs/${jobId}`, {
         headers: {
           'X-ARES-GH-PAT': token,
-          ...(copilotModel ? { 'X-ARES-COPILOT-MODEL': copilotModel } : {}),
+          ...(copilotLlmModel ? { 'X-ARES-COPILOT-LLM-MODEL': copilotLlmModel } : {}),
+          ...(copilotEmbeddingModel ? { 'X-ARES-COPILOT-EMBEDDING-MODEL': copilotEmbeddingModel } : {}),
         },
       });
       if (!pollResponse.ok) {

@@ -88,8 +88,8 @@ describe('Workspace Harvester Engine Tests', () => {
 
   test('Ollama embedding flow retrieves embeddings successfully with mock fetch', async () => {
     // Temporarily clear COPILOT_MODEL to trigger Ollama flow
-    const oldCopilot = process.env.COPILOT_MODEL;
-    delete process.env.COPILOT_MODEL;
+    const oldCopilot = process.env.COPILOT_EMBEDDING_MODEL;
+    delete process.env.COPILOT_EMBEDDING_MODEL;
 
     const mockResponseVec = new Array(768).fill(0.123);
     const originalFetch = global.fetch;
@@ -110,14 +110,66 @@ describe('Workspace Harvester Engine Tests', () => {
       expect(embedding[0]).toBeCloseTo(0.123);
     } finally {
       global.fetch = originalFetch;
-      if (oldCopilot) process.env.COPILOT_MODEL = oldCopilot;
+      if (oldCopilot) process.env.COPILOT_EMBEDDING_MODEL = oldCopilot;
     }
   });
 
+  test('Copilot embedding flow calls token exchange then embeddings API with mock fetch', async () => {
+    const oldCopilot = process.env.COPILOT_EMBEDDING_MODEL;
+    const oldPat = process.env.GITHUB_PAT;
+
+    process.env.COPILOT_EMBEDDING_MODEL = 'text-embedding-3-small';
+    process.env.GITHUB_PAT = 'ghp_test_token_for_mocking';
+
+    const mockVector = new Array(768).fill(0.777);
+    const originalFetch = global.fetch;
+
+    let callCount = 0;
+    global.fetch = mock((url: string) => {
+      callCount++;
+      if (typeof url === 'string' && url.includes('copilot_internal/v2/token')) {
+        // Token exchange response
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve(''),
+          json: () => Promise.resolve({
+            token: 'ghs_mock_session_token_12345',
+            expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          }),
+        } as any);
+      }
+      // Embedding API response
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(''),
+        json: () => Promise.resolve({
+          data: [{ embedding: mockVector }],
+        }),
+      } as any);
+    }) as any;
+
+    try {
+      const embedding = await getEmbedding('function foo() { return 42; }');
+      expect(embedding.length).toBe(768);
+      expect(embedding[0]).toBeCloseTo(0.777);
+      // Must have made exactly 2 fetch calls: token exchange + embedding
+      expect(callCount).toBe(2);
+    } finally {
+      global.fetch = originalFetch;
+      if (oldCopilot !== undefined) process.env.COPILOT_EMBEDDING_MODEL = oldCopilot;
+      else delete process.env.COPILOT_EMBEDDING_MODEL;
+      if (oldPat !== undefined) process.env.GITHUB_PAT = oldPat;
+      else delete process.env.GITHUB_PAT;
+    }
+  });
+
+
   test('harvester scans, chunks, embeds and persists in SQLite virtual table', async () => {
     // Clear mock model/env and inject dummy endpoints
-    const oldCopilot = process.env.COPILOT_MODEL;
-    delete process.env.COPILOT_MODEL;
+    const oldCopilot = process.env.COPILOT_EMBEDDING_MODEL;
+    delete process.env.COPILOT_EMBEDDING_MODEL;
     const oldInference = process.env.INFERENCE_URL;
     process.env.INFERENCE_URL = 'http://localhost:11434';
 
@@ -175,7 +227,7 @@ describe('Workspace Harvester Engine Tests', () => {
 
     } finally {
       global.fetch = originalFetch;
-      if (oldCopilot) process.env.COPILOT_MODEL = oldCopilot;
+      if (oldCopilot) process.env.COPILOT_EMBEDDING_MODEL = oldCopilot;
       if (oldInference) process.env.INFERENCE_URL = oldInference;
     }
   });

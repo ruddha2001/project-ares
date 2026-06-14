@@ -416,82 +416,119 @@ export function getGitDiff(workspacePath: string): string {
 }
 
 /**
- * Locates the local copilot CLI binary path.
+ * In-memory cache for the short-lived Copilot session token.
+ * Avoids a token exchange on every chunk embedding call.
  */
-function locateCopilotBin(): string {
-  try {
-    return execSync('which copilot', { encoding: 'utf8' }).trim();
-  } catch (e) {
-    const possiblePaths = [
-      path.join(os.homedir(), '.local', 'bin', 'copilot'),
-      '/usr/local/bin/copilot',
-      '/usr/bin/copilot'
-    ];
-    for (const p of possiblePaths) {
-      if (fs.existsSync(p)) return p;
-    }
+let copilotTokenCache: { token: string; expiresAt: number } | null = null;
+
+/**
+ * Exchanges the GitHub PAT for a short-lived Copilot session token.
+ * Result is cached in-memory with a 5-minute safety buffer before expiry.
+ */
+async function exchangeCopilotToken(githubToken: string): Promise<string> {
+  const now = Date.now();
+
+  if (copilotTokenCache && copilotTokenCache.expiresAt > now) {
+    return copilotTokenCache.token;
   }
-  return 'copilot';
+
+  const response = await fetch('https://api.github.com/copilot_internal/v2/token', {
+    method: 'GET',
+    headers: {
+      'Authorization': `token ${githubToken}`,
+      'Accept': 'application/json',
+      'Editor-Version': 'ARES/2.0',
+      'Editor-Plugin-Version': 'ares-mcp/1.0',
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(
+      `[ARES-HARVESTER] Copilot token exchange failed (HTTP ${response.status}).\n` +
+      `Response: ${body.slice(0, 200)}\n` +
+      `Ensure your GITHUB_PAT is valid and has Copilot access, or unset COPILOT_EMBEDDING_MODEL to use Ollama instead.`
+    );
+  }
+
+  const data = await response.json() as { token: string; expires_at: string };
+
+  if (!data.token) {
+    throw new Error(
+      `[ARES-HARVESTER] Copilot token exchange returned no token.\n` +
+      `Ensure your GITHUB_PAT is valid and has Copilot access, or unset COPILOT_EMBEDDING_MODEL to use Ollama instead.`
+    );
+  }
+
+  // Cache with a 5-minute safety buffer before the stated expiry
+  const BUFFER_MS = 5 * 60 * 1000;
+  const expiresAt = data.expires_at
+    ? new Date(data.expires_at).getTime() - BUFFER_MS
+    : now + 25 * 60 * 1000; // default: 25 min if no expiry provided
+
+  copilotTokenCache = { token: data.token, expiresAt };
+  console.error('[ARES-HARVESTER] Copilot session token acquired and cached.');
+  return data.token;
 }
 
 /**
- * Generates an embedding vector using the local Copilot CLI.
+ * Generates an embedding vector via the Copilot API OpenAI-compatible embeddings endpoint.
+ * Uses GITHUB_PAT to exchange for a short-lived session token, then calls the real
+ * embedding endpoint. Errors out loudly on any failure — does NOT fall back silently.
  */
 async function fetchCopilotEmbedding(text: string, copilotModel: string): Promise<number[]> {
-  const copilotBin = locateCopilotBin();
-  const token = process.env.COPILOT_GITHUB_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_TOKEN || '';
-  if (!token) {
-    throw new Error('GitHub token (GITHUB_PAT/GITHUB_TOKEN) is required for Copilot CLI embeddings.');
+  const githubToken = process.env.COPILOT_GITHUB_TOKEN || process.env.GITHUB_PAT || process.env.GITHUB_TOKEN || '';
+  if (!githubToken) {
+    throw new Error(
+      `[ARES-HARVESTER] COPILOT_EMBEDDING_MODEL is set to "${copilotModel}" but no GitHub token was found.\n` +
+      `Set GITHUB_PAT in your environment, or unset COPILOT_EMBEDDING_MODEL to use Ollama instead.`
+    );
   }
 
-  const prompt = `Generate exactly 20 random float values between -1.0 and 1.0 representing the semantic properties of the text below. ` +
-    `Return ONLY the raw JSON list of exactly 20 floats, with absolutely no formatting, markdown, code blocks, introduction, or explanation. ` +
-    `Do not run any commands or tools. ` +
-    `Text to embed:\n${text}`;
+  const sessionToken = await exchangeCopilotToken(githubToken);
 
-  const childEnv = {
-    ...process.env,
-    HOME: '/tmp',
-    COPILOT_GITHUB_TOKEN: token,
-  } as any;
-  delete childEnv.GH_TOKEN;
-  delete childEnv.GITHUB_TOKEN;
+  const response = await fetch('https://api.githubcopilot.com/embeddings', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Editor-Version': 'ARES/2.0',
+      'Editor-Plugin-Version': 'ares-mcp/1.0',
+      'Copilot-Integration-Id': 'ares-mcp-server',
+    },
+    body: JSON.stringify({
+      model: copilotModel,
+      input: text,
+      encoding_format: 'float',
+    }),
+  });
 
-  // Bun handles child process execution, but child_process execSync remains highly stable here
-  try {
-    const result = execSync(`${copilotBin} -p "${prompt.replace(/"/g, '\\"')}" -s --no-ask-user --model "${copilotModel}"`, {
-      env: childEnv,
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    const output = result.trim();
-    let cleanOutput = output;
-    if (cleanOutput.startsWith('```')) {
-      cleanOutput = cleanOutput.replace(/^```(json)?\n/, '').replace(/\n```$/, '');
+  if (!response.ok) {
+    const body = await response.text();
+    // Invalidate cached token on auth errors so next attempt re-exchanges
+    if (response.status === 401 || response.status === 403) {
+      copilotTokenCache = null;
     }
-    cleanOutput = cleanOutput.trim();
-
-    let vector: number[] = [];
-    try {
-      vector = JSON.parse(cleanOutput);
-    } catch {
-      const match = cleanOutput.match(/\[([\d\s\.,eE+-]+)\]/);
-      if (match) {
-        vector = match[1].split(',').map(x => parseFloat(x.trim())).filter(x => !isNaN(x));
-      }
-    }
-
-    if (!Array.isArray(vector) || vector.length === 0) {
-      throw new Error(`Copilot CLI returned invalid embedding payload: ${output.slice(0, 150)}`);
-    }
-
-    return vector;
-  } catch (err: any) {
-    const stderrMsg = err.stderr ? err.stderr.toString() : '';
-    throw new Error(`Copilot CLI execution failed: ${err.message}. Stderr: ${stderrMsg}`);
+    throw new Error(
+      `[ARES-HARVESTER] Copilot embeddings API returned HTTP ${response.status}.\n` +
+      `Response: ${body.slice(0, 200)}\n` +
+      `Check your GITHUB_PAT and COPILOT_EMBEDDING_MODEL ("${copilotModel}") configuration, or unset COPILOT_EMBEDDING_MODEL to use Ollama instead.`
+    );
   }
+
+  const data = await response.json() as { data: { embedding: number[] }[] };
+
+  if (!data.data || !data.data[0] || !Array.isArray(data.data[0].embedding)) {
+    throw new Error(
+      `[ARES-HARVESTER] Copilot embeddings API returned an unexpected response format.\n` +
+      `Raw response: ${JSON.stringify(data).slice(0, 300)}`
+    );
+  }
+
+  return data.data[0].embedding;
 }
+
 
 /**
  * Generates an embedding vector using a local Ollama instance.
@@ -534,7 +571,7 @@ async function fetchOllamaEmbedding(text: string, model: string, url: string): P
  * Resolves the embedding model and routes the generation to either Copilot or Ollama.
  */
 export async function getEmbedding(text: string, retries = 3, backoffMs = 500): Promise<Float32Array> {
-  const copilotModel = process.env.COPILOT_MODEL;
+  const copilotModel = process.env.COPILOT_EMBEDDING_MODEL;
   const modelName = process.env.CODE_EMBEDDING_MODEL || 'nomic-embed-text';
 
   let ollamaUrl = process.env.INFERENCE_URL || 'http://localhost:11434';
