@@ -119,13 +119,15 @@ def execute_codebase_gauntlet(
                             continue
 
                         relative_path = file_path.relative_to(workspace_dir).as_posix()
+                        code_model = os.environ.get("CODE_EMBEDDING_MODEL", "nomic-embed-text")
                         for chunk_index, chunk in enumerate(
                             chunk_text(file_text), start=1
                         ):
                             embedding = fetch_api_embedding(
                                 chunk,
                                 github_token=github_token,
-                                copilot_model=copilot_model
+                                copilot_model=copilot_model,
+                                model=code_model
                             )
                             import uuid
                             from datetime import datetime
@@ -146,7 +148,7 @@ def execute_codebase_gauntlet(
                                     created_at,
                                     updated_at
                                 )
-                                VALUES (%s, %s, %s, %s, %s, %s, %s::vector(768), %s, %s)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s::vector(1024), %s, %s)
                                 """,
                                 (
                                     str(uuid.uuid4()),

@@ -4,6 +4,7 @@ import { handlePlanning } from './tools/planning';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { handleVerification } from './tools/verification';
+import { getDatabase, runVerificationSuite } from './services/database.js';
 
 const server = new McpServer({
   name: 'ares-mcp-server',
@@ -33,6 +34,10 @@ server.registerTool(
 );
 
 async function run() {
+  console.error('[ARES-LOG] Booting Local SQLite Tier...');
+  const db = getDatabase();
+  runVerificationSuite(db);
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
