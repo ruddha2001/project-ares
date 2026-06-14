@@ -65,7 +65,8 @@ public class JobController {
     public ResponseEntity<Map<String, String>> triggerLibrarianPlanning(
             @PathVariable UUID jobId,
             @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
-            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
+            @RequestHeader(value = "X-ARES-COPILOT-EMBEDDING-MODEL", required = false) String copilotEmbeddingModel,
+            @RequestHeader(value = "X-ARES-COPILOT-LLM-MODEL", required = false) String copilotLlmModel) {
 
         AresJob job = jobRepository.findById(jobId).orElse(null);
         if (job == null) {
@@ -80,7 +81,7 @@ public class JobController {
                 String featurePrompt = job.getTaskDescription();
 
                 Map<String, Object> context = planningOrchestrationService.executePlanning(
-                        projectId, featurePrompt, githubToken, copilotModel);
+                        projectId, featurePrompt, githubToken, copilotEmbeddingModel);
                 String contextPayload = (String) context.get("contextPayload");
 
                 updateJobState(jobId, JobStatus.PROCESSING, "LIBRARIAN_PLANNING", null);
@@ -92,7 +93,7 @@ public class JobController {
 
                         %s
                         """, contextPayload);
-                String plan = planningOrchestrationService.generateText(prompt, githubToken, copilotModel);
+                String plan = planningOrchestrationService.generateText(prompt, githubToken, copilotLlmModel);
 
                 updateJobState(jobId, JobStatus.COMPLETED, "PLANNING_COMPLETE", plan);
                 log.info("Librarian planning track finalized for job: {}", jobId);
@@ -112,7 +113,8 @@ public class JobController {
     public ResponseEntity<Map<String, String>> triggerLibrarianVerification(
             @PathVariable UUID jobId,
             @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
-            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
+            @RequestHeader(value = "X-ARES-COPILOT-EMBEDDING-MODEL", required = false) String copilotEmbeddingModel,
+            @RequestHeader(value = "X-ARES-COPILOT-LLM-MODEL", required = false) String copilotLlmModel) {
 
         AresJob job = jobRepository.findById(jobId).orElse(null);
         if (job == null) {
@@ -131,7 +133,7 @@ public class JobController {
                 String gitDiff = job.getGitDiff();
 
                 Map<String, Object> context = planningOrchestrationService.executeVerification(
-                        projectId, gitDiff, githubToken, copilotModel);
+                        projectId, gitDiff, githubToken, copilotEmbeddingModel);
                 String contextPayload = (String) context.get("contextPayload");
 
                 // Update Step C: Compliance Review State
@@ -152,7 +154,7 @@ public class JobController {
                                 """,
                         gitDiff, contextPayload);
                 String verificationResult = planningOrchestrationService.generateText(prompt, githubToken,
-                        copilotModel);
+                        copilotLlmModel);
 
                 // Update Step D: Completion
                 updateJobState(jobId, JobStatus.COMPLETED, "VERIFICATION_COMPLETE", verificationResult);
