@@ -28,3 +28,15 @@ export const VerificationSchema: any = {
     .optional(),
   gitDiff: z.string().min(1, 'Git diff context stream cannot be empty.'),
 };
+
+export const HarvestSchema: any = {
+  workspacePath: z
+    .string()
+    .optional()
+    .describe('Absolute path to the workspace directory to scan. Defaults to the current working directory.'),
+  force: z
+    .boolean()
+    .optional()
+    .describe('If true, force re-indexing of all files bypassing the hash checks.'),
+};
+
