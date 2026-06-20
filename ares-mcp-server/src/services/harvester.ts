@@ -98,23 +98,122 @@ const loadedLanguages = new Map<string, any>();
 const activeCodebaseExtensions = new Set<string>();
 let isTreeSitterInitialized = false;
 
+/**
+ * Resolves the main file of a package inside node_modules manually.
+ * Needed when compiled with Bun, as dynamic folder resolution on the host filesystem is not supported by Bun's compiled require.
+ */
+function resolvePackageMain(packageDir: string): string | null {
+  if (!fs.existsSync(packageDir)) return null;
+  const pkgJsonPath = path.join(packageDir, 'package.json');
+  if (fs.existsSync(pkgJsonPath)) {
+    try {
+      const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+      const mainField = pkgJson.main || 'index.js';
+      const mainPath = path.resolve(packageDir, mainField);
+      
+      const candidates = [
+        mainPath,
+        mainPath + '.js',
+        mainPath + '.json',
+        mainPath + '.node',
+        path.join(mainPath, 'index.js'),
+        path.join(mainPath, 'index.node'),
+      ];
+      
+      for (const cand of candidates) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+          return cand;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  
+  const fallbacks = [
+    path.join(packageDir, 'index.js'),
+    path.join(packageDir, 'index.node'),
+  ];
+  for (const fb of fallbacks) {
+    if (fs.existsSync(fb) && fs.statSync(fb).isFile()) {
+      return fb;
+    }
+  }
+  return null;
+}
+
 export function initTreeSitter() {
   if (isTreeSitterInitialized) return;
-  
-  try {
-    Parser = import.meta.require('tree-sitter');
-  } catch (err: any) {
-    throw new Error(`[ARES-HARVESTER] Critical Error: Failed to load native 'tree-sitter' bindings: ${err.message}`);
+
+  const execDir = path.dirname(process.execPath);
+  const nodeModulesCandidates = [
+    path.resolve(execDir, '../node_modules'),
+    path.resolve(execDir, 'node_modules'),
+    path.resolve(process.cwd(), 'node_modules'),
+    path.resolve(process.cwd(), 'ares-mcp-server', 'node_modules'),
+  ];
+  if (process.env.ARES_WORKSPACE_PATH) {
+    nodeModulesCandidates.push(path.resolve(process.env.ARES_WORKSPACE_PATH, 'node_modules'));
+    nodeModulesCandidates.push(path.resolve(process.env.ARES_WORKSPACE_PATH, 'ares-mcp-server', 'node_modules'));
   }
+
+  // 1. Try to load tree-sitter bindings
+  let loadedParser: any = null;
+  let lastError: any = null;
+  try {
+    loadedParser = import.meta.require('tree-sitter');
+  } catch (err: any) {
+    lastError = err;
+  }
+
+  if (!loadedParser) {
+    for (const candidate of nodeModulesCandidates) {
+      try {
+        const treeSitterPath = path.join(candidate, 'tree-sitter');
+        const mainFile = resolvePackageMain(treeSitterPath);
+        if (mainFile) {
+          loadedParser = import.meta.require(mainFile);
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+      }
+    }
+  }
+
+  if (!loadedParser) {
+    throw new Error(`[ARES-HARVESTER] Critical Error: Failed to load native 'tree-sitter' bindings: ${lastError?.message}`);
+  }
+  Parser = loadedParser;
 
   const supportedGrammarsEnv = process.env.SUPPORTED_GRAMMARS;
   if (!supportedGrammarsEnv) {
     throw new Error("[ARES-HARVESTER] Critical Error: Environment variable 'SUPPORTED_GRAMMARS' is not configured.");
   }
 
-  const configPath = path.resolve(import.meta.dir, '../../grammars.json');
-  if (!fs.existsSync(configPath)) {
-    throw new Error(`[ARES-HARVESTER] Critical Error: Grammars config file not found at ${configPath}`);
+  // 2. Locate grammars.json config file
+  const configCandidates = [
+    path.resolve(execDir, '../grammars.json'),
+    path.resolve(execDir, 'grammars.json'),
+    path.resolve(process.cwd(), 'grammars.json'),
+    path.resolve(process.cwd(), 'ares-mcp-server', 'grammars.json'),
+    path.resolve(import.meta.dir, '../../grammars.json'),
+  ];
+  if (process.env.ARES_WORKSPACE_PATH) {
+    configCandidates.push(path.resolve(process.env.ARES_WORKSPACE_PATH, 'grammars.json'));
+    configCandidates.push(path.resolve(process.env.ARES_WORKSPACE_PATH, 'ares-mcp-server', 'grammars.json'));
+  }
+
+  let configPath = '';
+  for (const candidate of configCandidates) {
+    if (fs.existsSync(candidate)) {
+      configPath = candidate;
+      break;
+    }
+  }
+
+  if (!configPath) {
+    throw new Error(`[ARES-HARVESTER] Critical Error: Grammars config file (grammars.json) not found in search paths: ${JSON.stringify(configCandidates)}`);
   }
 
   let config: Record<string, { npmPackage: string; extensions: string[]; languageAccessProperty: string }>;
@@ -135,8 +234,35 @@ export function initTreeSitter() {
       throw new Error(`[ARES-HARVESTER] Critical Error: Grammar '${langName}' is configured in SUPPORTED_GRAMMARS but not found in grammars.json.`);
     }
 
+    let pkg: any = null;
+    let pkgError: any = null;
+
     try {
-      const pkg = import.meta.require(grammarConfig.npmPackage);
+      pkg = import.meta.require(grammarConfig.npmPackage);
+    } catch (err: any) {
+      pkgError = err;
+    }
+
+    if (!pkg) {
+      for (const candidate of nodeModulesCandidates) {
+        try {
+          const grammarPkgPath = path.join(candidate, grammarConfig.npmPackage);
+          const mainFile = resolvePackageMain(grammarPkgPath);
+          if (mainFile) {
+            pkg = import.meta.require(mainFile);
+            break;
+          }
+        } catch (err: any) {
+          pkgError = err;
+        }
+      }
+    }
+
+    if (!pkg) {
+      throw new Error(`[ARES-HARVESTER] Critical Error: Failed to load configured grammar package '${grammarConfig.npmPackage}': ${pkgError?.message}`);
+    }
+
+    try {
       let lang: any;
       const prop = grammarConfig.languageAccessProperty;
       if (prop === 'default') {

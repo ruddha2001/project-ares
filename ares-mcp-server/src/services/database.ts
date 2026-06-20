@@ -54,27 +54,55 @@ function loadSqliteVec(db: Database): void {
     console.error(`[ARES-DB] Standard sqlite-vec load failed: ${err.message}. Attempting architecture-sensing fallback...`);
     
     try {
-      const packageDir = path.dirname(require.resolve('sqlite-vec/package.json'));
       const platform = os.platform();
       const ext = platform === 'darwin' ? '.dylib' : platform === 'win32' ? '.dll' : '.so';
       
       const findBinary = (dir: string): string | null => {
-        const files = fs.readdirSync(dir, { withFileTypes: true });
-        for (const file of files) {
-          const fullPath = path.join(dir, file.name);
-          if (file.isDirectory()) {
-            const found = findBinary(fullPath);
-            if (found) return found;
-          } else if (file.isFile() && file.name.endsWith(ext) && file.name.includes('vec')) {
-            return fullPath;
+        if (!fs.existsSync(dir)) return null;
+        try {
+          const files = fs.readdirSync(dir, { withFileTypes: true });
+          for (const file of files) {
+            const fullPath = path.join(dir, file.name);
+            if (file.isDirectory()) {
+              const found = findBinary(fullPath);
+              if (found) return found;
+            } else if (file.isFile() && file.name.endsWith(ext) && file.name.includes('vec')) {
+              return fullPath;
+            }
           }
+        } catch {
+          // ignore read errors
         }
         return null;
       };
       
-      const fallbackPath = findBinary(packageDir);
+      const execDir = path.dirname(process.execPath);
+      const candidates = [
+        path.resolve(execDir, '../node_modules'),
+        path.resolve(execDir, 'node_modules'),
+        path.resolve(process.cwd(), 'node_modules'),
+        path.resolve(process.cwd(), 'ares-mcp-server', 'node_modules'),
+      ];
+      if (process.env.ARES_WORKSPACE_PATH) {
+        candidates.push(path.resolve(process.env.ARES_WORKSPACE_PATH, 'node_modules'));
+        candidates.push(path.resolve(process.env.ARES_WORKSPACE_PATH, 'ares-mcp-server', 'node_modules'));
+      }
+
+      try {
+        const packageDir = path.dirname(require.resolve('sqlite-vec/package.json'));
+        candidates.unshift(packageDir);
+      } catch {
+        // ignore
+      }
+      
+      let fallbackPath: string | null = null;
+      for (const candidate of candidates) {
+        fallbackPath = findBinary(candidate);
+        if (fallbackPath) break;
+      }
+
       if (!fallbackPath) {
-        throw new Error(`No binary with extension "${ext}" containing "vec" found in ${packageDir}`);
+        throw new Error(`No binary with extension "${ext}" containing "vec" found in candidates: ${JSON.stringify(candidates)}`);
       }
       
       console.error(`[ARES-DB] Loading fallback sqlite-vec binary at: ${fallbackPath}`);
