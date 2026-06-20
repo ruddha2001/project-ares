@@ -1,0 +1,54 @@
+name: CD - Publish ares-mcp-server
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'ares-mcp-server/**'
+permissions:
+  contents: write
+  packages: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ares-mcp-server
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Required to safely evaluate git diff history for version changes
+      - name: Setup Bun Environment
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install Project Dependencies
+        run: bun install --frozen-lockfile
+      - name: Dynamic Version Evaluation and Auto-Patch
+        id: versioning
+        run: |
+          # 1. Check if package.json version field changed in the last commit
+          if git diff HEAD^ HEAD -- package.json | grep -q '+"version":'; then
+            echo "Manual version bump detected. Skipping auto-increment."
+          else
+            echo "No manual version bump found. Incrementing patch version..."
+            # Use bun/npm to increase the patch version cleanly
+            bun x npm version patch --no-git-tag-version
+            
+            # Configure git to commit the automated version change back to repo
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add package.json
+            git commit -m "chore(release): auto-increment patch version [skip ci]"
+            git push
+          fi
+      - name: Compile Standalone Native Bun Binary
+        run: bun run build
+      - name: Configure NPM Registry Token Registry
+        run: |
+          echo "@ares:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" >> .npmrc
+      - name: Publish Public Asset Packet to GitHub Packages
+        run: npm publish --registry=https://npm.pkg.github.com
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
