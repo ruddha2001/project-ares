@@ -83,9 +83,13 @@ async function run() {
   process.env.ARES_WORKSPACE_PATH = workspacePath;
 
   // 4. Initialize Local SQLite Tier now that the workspace path is resolved
-  console.error('[ARES-LOG] Booting Local SQLite Tier...');
-  const db = getDatabase();
-  runVerificationSuite(db);
+  try {
+    console.error('[ARES-LOG] Booting Local SQLite Tier...');
+    const db = getDatabase();
+    runVerificationSuite(db);
+  } catch (err: any) {
+    console.error(`[ARES-WARNING] Failed to boot SQLite database: ${err.message}. Workspace harvesting and local context queries will be disabled, but server is fully responsive.`);
+  }
 
   // 5. Apply safety check before background harvesting to prevent indexing home/system directory
   const normalizedPath = workspacePath.replace(/\/$/, '');
