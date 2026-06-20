@@ -2,13 +2,24 @@
   "name": "ares-mcp-server",
   "version": "0.0.1",
   "description": "Model Context Protocol Transport Sidecar for Project ARES",
-  "main": "src/index.ts",
+  "main": "dist/ares-mcp-server",
+  "bin": {
+    "ares-mcp-server": "./dist/ares-mcp-server"
+  },
   "type": "module",
   "scripts": {
-    "start": "bun run src/index.ts"
+    "clean": "rm -rf dist && mkdir dist",
+    "build": "bun run clean && bun build ./src/index.ts --compile --outfile=./dist/ares-mcp-server",
+    "package": "npm pack"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
+    "fast-glob": "^3.3.3",
+    "sqlite-vec": "0.1.9",
+    "tree-sitter": "0.21.0",
+    "tree-sitter-java": "^0.23.5",
+    "tree-sitter-python": "0.21.0",
+    "tree-sitter-typescript": "^0.23.2",
     "zod": "4.4.3"
   },
   "devDependencies": {

@@ -1,0 +1,15 @@
+# Exclude raw source artifacts and test suites
+src/
+payloads/
+*.test.ts
+
+# Exclude runtime environment databases, locks, and secrets
+bun.lock
+.ares/
+.env
+
+# Exclude toolchain/development files
+.gitignore
+.prettierrc
+tsconfig.json
+node_modules/

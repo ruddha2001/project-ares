@@ -1,5 +1,6 @@
 package codes.ani.ares.backend.controller;
 
+import codes.ani.ares.backend.dto.JobInitializationRequest;
 import codes.ani.ares.backend.model.AresJob;
 import codes.ani.ares.backend.model.JobStatus;
 import codes.ani.ares.backend.repository.AresJobRepository;
@@ -25,13 +26,29 @@ public class JobController {
     private final PlanningOrchestrationService planningOrchestrationService;
 
     @PostMapping
-    public ResponseEntity<AresJob> createJob(@RequestBody AresJob jobInitialArgs) {
-        return projectRepository.getByRepoUrl(jobInitialArgs.getRepoUrl()).map(project -> {
-            jobInitialArgs.setStatus(JobStatus.INITIALIZED);
-            jobInitialArgs.setCurrentTask("Workspace anchor established");
+    public ResponseEntity<AresJob> createJob(@RequestBody JobInitializationRequest request) {
+        String repoUrl = request.repositoryUrl();
+        return projectRepository.getByRepoUrl(repoUrl).map(project -> {
+            AresJob job = new AresJob();
+            job.setProjectId(project.getId());
+            job.setRepoUrl(repoUrl);
+            job.setStatus(JobStatus.INITIALIZED);
+            job.setCurrentTask("Workspace anchor established");
+            job.setTaskDescription(request.rawSpecificationText());
+            job.setGitDiff(request.localGitDiff());
+            job.setDocUrl(request.featureSpecUrl());
 
-            jobInitialArgs.setProjectId(project.getId());
-            AresJob saved = jobRepository.save(jobInitialArgs);
+            if (request.routingConfiguration() != null) {
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    String routingJson = mapper.writeValueAsString(request.routingConfiguration());
+                    job.setAuditMetadata(routingJson);
+                } catch (Exception e) {
+                    log.error("Failed to serialize routingConfiguration", e);
+                }
+            }
+
+            AresJob saved = jobRepository.save(job);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         })
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -48,7 +65,8 @@ public class JobController {
     public ResponseEntity<Map<String, String>> triggerLibrarianPlanning(
             @PathVariable UUID jobId,
             @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
-            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
+            @RequestHeader(value = "X-ARES-COPILOT-EMBEDDING-MODEL", required = false) String copilotEmbeddingModel,
+            @RequestHeader(value = "X-ARES-COPILOT-LLM-MODEL", required = false) String copilotLlmModel) {
 
         AresJob job = jobRepository.findById(jobId).orElse(null);
         if (job == null) {
@@ -63,7 +81,7 @@ public class JobController {
                 String featurePrompt = job.getTaskDescription();
 
                 Map<String, Object> context = planningOrchestrationService.executePlanning(
-                        projectId, featurePrompt, githubToken, copilotModel);
+                        projectId, featurePrompt, githubToken, copilotEmbeddingModel);
                 String contextPayload = (String) context.get("contextPayload");
 
                 updateJobState(jobId, JobStatus.PROCESSING, "LIBRARIAN_PLANNING", null);
@@ -75,7 +93,7 @@ public class JobController {
 
                         %s
                         """, contextPayload);
-                String plan = planningOrchestrationService.generateText(prompt, githubToken, copilotModel);
+                String plan = planningOrchestrationService.generateText(prompt, githubToken, copilotLlmModel);
 
                 updateJobState(jobId, JobStatus.COMPLETED, "PLANNING_COMPLETE", plan);
                 log.info("Librarian planning track finalized for job: {}", jobId);
@@ -95,7 +113,8 @@ public class JobController {
     public ResponseEntity<Map<String, String>> triggerLibrarianVerification(
             @PathVariable UUID jobId,
             @RequestHeader(value = "X-ARES-GH-PAT", required = false) String githubToken,
-            @RequestHeader(value = "X-ARES-COPILOT-MODEL", required = false) String copilotModel) {
+            @RequestHeader(value = "X-ARES-COPILOT-EMBEDDING-MODEL", required = false) String copilotEmbeddingModel,
+            @RequestHeader(value = "X-ARES-COPILOT-LLM-MODEL", required = false) String copilotLlmModel) {
 
         AresJob job = jobRepository.findById(jobId).orElse(null);
         if (job == null) {
@@ -114,7 +133,7 @@ public class JobController {
                 String gitDiff = job.getGitDiff();
 
                 Map<String, Object> context = planningOrchestrationService.executeVerification(
-                        projectId, gitDiff, githubToken, copilotModel);
+                        projectId, gitDiff, githubToken, copilotEmbeddingModel);
                 String contextPayload = (String) context.get("contextPayload");
 
                 // Update Step C: Compliance Review State
@@ -135,7 +154,7 @@ public class JobController {
                                 """,
                         gitDiff, contextPayload);
                 String verificationResult = planningOrchestrationService.generateText(prompt, githubToken,
-                        copilotModel);
+                        copilotLlmModel);
 
                 // Update Step D: Completion
                 updateJobState(jobId, JobStatus.COMPLETED, "VERIFICATION_COMPLETE", verificationResult);

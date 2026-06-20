@@ -71,7 +71,8 @@ def execute_document_gauntlet(
     source_url: str,
     document_token: Optional[str] = None,
     github_token: Optional[str] = None,
-    copilot_model: Optional[str] = None,
+    copilot_embedding_model: Optional[str] = None,
+    copilot_llm_model: Optional[str] = None,
 ):
     logging.info(
         f"Starting authentic Document Ingestion for Job: {job_id} -> Target: {source_url}"
@@ -113,6 +114,7 @@ def execute_document_gauntlet(
         conn = psycopg2.connect(db_url)
         try:
             with conn.cursor() as cur:
+                doc_model = os.environ.get("DOC_EMBEDDING_MODEL", "bge-m3")
                 for idx, chunk in enumerate(text_chunks):
                     logging.info(
                         f"Extracting embedding for chunk {idx + 1}/{len(text_chunks)}..."
@@ -120,7 +122,8 @@ def execute_document_gauntlet(
                     embedding_vector = fetch_embedding(
                         chunk,
                         github_token=github_token,
-                        copilot_model=copilot_model
+                        copilot_model=copilot_embedding_model,
+                        model=doc_model
                     )
                     import uuid
                     from datetime import datetime
@@ -137,7 +140,7 @@ def execute_document_gauntlet(
                             created_at,
                             updated_at
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s::vector(768), %s, %s);
+                        VALUES (%s, %s, %s, %s, %s, %s, %s::vector(1024), %s, %s);
                     """
 
                     cur.execute(

@@ -24,8 +24,11 @@ public class PlanningOrchestrationService {
     private final RestClient.Builder restClientBuilder;
     private RestClient ollamaClient;
 
-    @Value("${COPILOT_MODEL:}")
-    private String copilotModel;
+    @Value("${COPILOT_EMBEDDING_MODEL:}")
+    private String copilotEmbeddingModel;
+
+    @Value("${COPILOT_LLM_MODEL:}")
+    private String copilotLlmModel;
 
     @Value("${GITHUB_PAT:}")
     private String githubPat;
@@ -38,40 +41,31 @@ public class PlanningOrchestrationService {
         this.ollamaClient = restClientBuilder.baseUrl(inferenceUrl).build();
     }
 
-    public String getEmbedding(String textPrompt) {
-        return getEmbedding(textPrompt, null, null);
+    public String getEmbedding(String textPrompt, boolean isCode) {
+        return getEmbedding(textPrompt, null, null, isCode);
     }
 
     @SuppressWarnings("unchecked")
-    public String getEmbedding(String textPrompt, String effectiveGithubToken, String effectiveCopilotModel) {
+    public String getEmbedding(String textPrompt, String effectiveGithubToken, String effectiveCopilotEmbeddingModel, boolean isCode) {
         String responseStr;
-        String finalModel = (effectiveCopilotModel != null && !effectiveCopilotModel.trim().isEmpty())
-                ? effectiveCopilotModel
-                : this.copilotModel;
+        String finalModel = (effectiveCopilotEmbeddingModel != null && !effectiveCopilotEmbeddingModel.trim().isEmpty())
+                ? effectiveCopilotEmbeddingModel
+                : this.copilotEmbeddingModel;
         String finalToken = (effectiveGithubToken != null && !effectiveGithubToken.trim().isEmpty())
                 ? effectiveGithubToken
                 : this.githubPat;
 
-        if (finalModel != null && !finalModel.trim().isEmpty()) {
-            log.info("Requesting vector embedding extraction from Copilot CLI via inference-worker...");
-            responseStr = inferenceWorkerClient.post()
-                    .uri("/api/embeddings")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
-                            "prompt", textPrompt,
-                            "copilot_model", finalModel,
-                            "github_token", finalToken))
-                    .retrieve()
-                    .body(String.class);
-        } else {
-            log.info("Requesting vector embedding extraction from local inference-sidecar (Ollama)...");
-            responseStr = ollamaClient.post()
-                    .uri("/api/embeddings")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("model", "nomic-embed-text", "prompt", textPrompt))
-                    .retrieve()
-                    .body(String.class);
-        }
+        log.info("Requesting vector embedding extraction (isCode={}) from inference-worker...", isCode);
+        responseStr = inferenceWorkerClient.post()
+                .uri("/api/embeddings")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of(
+                        "prompt", textPrompt,
+                        "copilot_embedding_model", finalModel != null ? finalModel : "",
+                        "github_token", finalToken,
+                        "is_code", isCode))
+                .retrieve()
+                .body(String.class);
 
         Map<String, Object> response;
         try {
@@ -94,13 +88,14 @@ public class PlanningOrchestrationService {
     }
 
     public String compileLibrarianContextPayload(UUID projectId, String textPrompt, String effectiveGithubToken,
-            String effectiveCopilotModel) {
-        // 1. Generate real prompt embedding vector
-        String vectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotModel);
+            String effectiveCopilotEmbeddingModel) {
+        // 1. Generate real prompt embedding vectors
+        String codebaseVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotEmbeddingModel, true);
+        String docVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotEmbeddingModel, false);
 
         // 2. Perform parallelized two-tiered searches
-        List<KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(projectId, vectorString, 5);
-        List<KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(projectId, vectorString, 5);
+        List<KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(projectId, codebaseVectorString, 5);
+        List<KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(projectId, docVectorString, 5);
 
         // 3. Format the context wrappers neatly for the LLM
         StringBuilder contextBuilder = new StringBuilder();
@@ -126,10 +121,11 @@ public class PlanningOrchestrationService {
     }
 
     public Map<String, Object> executePlanning(UUID projectId, String textPrompt, String effectiveGithubToken,
-            String effectiveCopilotModel) {
-        String vectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotModel);
-        List<KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(projectId, vectorString, 5);
-        List<KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(projectId, vectorString, 5);
+            String effectiveCopilotEmbeddingModel) {
+        String codebaseVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotEmbeddingModel, true);
+        String docVectorString = getEmbedding(textPrompt, effectiveGithubToken, effectiveCopilotEmbeddingModel, false);
+        List<KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(projectId, codebaseVectorString, 5);
+        List<KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(projectId, docVectorString, 5);
 
         StringBuilder contextBuilder = new StringBuilder();
         contextBuilder.append("=== TARGET SYSTEM REQUIREMENT / FEATURE REQUEST ===\n");
@@ -156,10 +152,11 @@ public class PlanningOrchestrationService {
     }
 
     public Map<String, Object> executeVerification(UUID projectId, String gitDiff, String effectiveGithubToken,
-            String effectiveCopilotModel) {
-        String vectorString = getEmbedding(gitDiff, effectiveGithubToken, effectiveCopilotModel);
-        List<KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(projectId, vectorString, 5);
-        List<KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(projectId, vectorString, 5);
+            String effectiveCopilotEmbeddingModel) {
+        String codebaseVectorString = getEmbedding(gitDiff, effectiveGithubToken, effectiveCopilotEmbeddingModel, true);
+        String docVectorString = getEmbedding(gitDiff, effectiveGithubToken, effectiveCopilotEmbeddingModel, false);
+        List<KnowledgeIndex> codebaseMatches = indexRepository.searchCodebase(projectId, codebaseVectorString, 5);
+        List<KnowledgeIndex> documentMatches = indexRepository.searchDocumentation(projectId, docVectorString, 5);
 
         StringBuilder contextBuilder = new StringBuilder();
         contextBuilder.append("=== TIER 1: CODEBASE REFERENCE CONTEXT ===\n");
@@ -182,35 +179,25 @@ public class PlanningOrchestrationService {
                 "documentMatches", documentMatches);
     }
 
-    public String generateText(String prompt, String effectiveGithubToken, String effectiveCopilotModel) {
+    public String generateText(String prompt, String effectiveGithubToken, String effectiveCopilotLlmModel) {
         String responseStr;
-        String finalModel = (effectiveCopilotModel != null && !effectiveCopilotModel.trim().isEmpty())
-                ? effectiveCopilotModel
-                : this.copilotModel;
+        String finalModel = (effectiveCopilotLlmModel != null && !effectiveCopilotLlmModel.trim().isEmpty())
+                ? effectiveCopilotLlmModel
+                : this.copilotLlmModel;
         String finalToken = (effectiveGithubToken != null && !effectiveGithubToken.trim().isEmpty())
                 ? effectiveGithubToken
                 : this.githubPat;
 
-        if (finalModel != null && !finalModel.trim().isEmpty()) {
-            log.info("Requesting completion generation from Copilot CLI via inference-worker...");
-            responseStr = inferenceWorkerClient.post()
-                    .uri("/api/generate")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
-                            "prompt", prompt,
-                            "copilot_model", finalModel,
-                            "github_token", finalToken))
-                    .retrieve()
-                    .body(String.class);
-        } else {
-            log.info("Requesting completion generation from local inference-sidecar (Ollama)...");
-            responseStr = ollamaClient.post()
-                    .uri("/api/generate")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("model", "llama3", "prompt", prompt, "stream", false))
-                    .retrieve()
-                    .body(String.class);
-        }
+        log.info("Requesting completion generation from inference-worker...");
+        responseStr = inferenceWorkerClient.post()
+                .uri("/api/generate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of(
+                        "prompt", prompt,
+                        "copilot_llm_model", finalModel != null ? finalModel : "",
+                        "github_token", finalToken))
+                .retrieve()
+                .body(String.class);
 
         Map<String, Object> response;
         try {

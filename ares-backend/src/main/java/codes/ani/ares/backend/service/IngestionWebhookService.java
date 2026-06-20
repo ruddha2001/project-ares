@@ -17,7 +17,7 @@ import java.util.UUID;
 public class IngestionWebhookService {
     private final RestClient inferenceWorkerClient;
 
-    public void triggerCodebaseIngestion(UUID jobId, Project project, String githubToken, String copilotModel) {
+    public void triggerCodebaseIngestion(UUID jobId, Project project, String githubToken, String copilotEmbeddingModel) {
         log.info("Dispatching codebase gauntlet webhook for project: {}", project.getId());
 
         Map<String, Object> payload = new java.util.HashMap<>();
@@ -26,8 +26,8 @@ public class IngestionWebhookService {
         payload.put("repo_url", project.getRepoUrl());
         payload.put("default_branch", project.getDefaultBranch());
         payload.put("github_token", githubToken);
-        if (copilotModel != null) {
-            payload.put("copilot_model", copilotModel);
+        if (copilotEmbeddingModel != null) {
+            payload.put("copilot_embedding_model", copilotEmbeddingModel);
         }
 
         inferenceWorkerClient.post()
@@ -38,7 +38,7 @@ public class IngestionWebhookService {
                 .toBodilessEntity();
     }
 
-    public void triggerDocumentIngestion(UUID jobId, ManualDocIngestionDTO docDTO, String documentToken, String githubToken, String copilotModel) {
+    public void triggerDocumentIngestion(UUID jobId, ManualDocIngestionDTO docDTO, String documentToken, String githubToken, String copilotEmbeddingModel) {
         log.info("Dispatching document gauntlet webhook for project reference: {}", docDTO.projectId());
 
         Map<String, Object> payload = new java.util.HashMap<>();
@@ -52,8 +52,8 @@ public class IngestionWebhookService {
         if (githubToken != null) {
             payload.put("github_token", githubToken);
         }
-        if (copilotModel != null) {
-            payload.put("copilot_model", copilotModel);
+        if (copilotEmbeddingModel != null) {
+            payload.put("copilot_embedding_model", copilotEmbeddingModel);
         }
 
         inferenceWorkerClient.post()
