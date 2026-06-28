@@ -1,10 +1,10 @@
 ---
-trigger: always
+trigger: always_on
 ---
 
 # Pull Request & Commit Standards
 
-Whenever you complete a coding task or feature request, you MUST strictly adhere to the following workflow to commit, push, and create a Pull Request on GitHub:
+Whenever you are asked to create a Pull Request, you MUST strictly adhere to the following workflow to commit, push, and create a Pull Request on GitHub:
 
 1. **Logical Commit Grouping**:
    - Do NOT commit all files in a single generic commit.
