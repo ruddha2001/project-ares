@@ -1,16 +1,23 @@
 package codes.ani.ares.backend.controller;
 
 import codes.ani.ares.backend.dto.JobInitializationRequest;
+import codes.ani.ares.backend.dto.ProviderRequest;
+import codes.ani.ares.backend.dto.ProviderResponse;
+import codes.ani.ares.backend.enums.PipelineStage;
 import codes.ani.ares.backend.model.AresJob;
 import codes.ani.ares.backend.model.JobStatus;
 import codes.ani.ares.backend.repository.AresJobRepository;
 import codes.ani.ares.backend.repository.ProjectRepository;
 import codes.ani.ares.backend.service.PlanningOrchestrationService;
+import codes.ani.ares.backend.service.ModelRoutingEngine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.util.Map;
 import java.util.UUID;
 
@@ -24,6 +31,7 @@ public class JobController {
     private final AresJobRepository jobRepository;
     private final ProjectRepository projectRepository;
     private final PlanningOrchestrationService planningOrchestrationService;
+    private final ModelRoutingEngine modelRoutingEngine;
 
     @PostMapping
     public ResponseEntity<AresJob> createJob(@RequestBody JobInitializationRequest request) {
@@ -87,13 +95,37 @@ public class JobController {
                 updateJobState(jobId, JobStatus.PROCESSING, "LIBRARIAN_PLANNING", null);
 
                 String prompt = String.format("""
-                        You are Antigravity, a premium agentic AI coding assistant.
+                        You are ARES, a premium agentic implementation plan generation agent.
                         Based on the following requirement and context, generate a detailed implementation plan.
                         Use clear markdown formatting, list modified/new files, and outline the steps clearly.
+                        Do not make any assumptions, and use the context only to generate the implementaion plan.
 
                         %s
                         """, contextPayload);
-                String plan = planningOrchestrationService.generateText(prompt, githubToken, copilotLlmModel);
+
+                Map<PipelineStage, String> routingConfig = Map.of();
+                if (job.getAuditMetadata() != null) {
+                    try {
+                        ObjectMapper mapper = new ObjectMapper();
+                        routingConfig = mapper.readValue(job.getAuditMetadata(),
+                                new com.fasterxml.jackson.core.type.TypeReference<Map<PipelineStage, String>>() {
+                                });
+                    } catch (Exception e) {
+                        log.error("Failed to deserialize routingConfiguration", e);
+                    }
+                }
+                JobInitializationRequest contextInit = new JobInitializationRequest(
+                        job.getProjectId(),
+                        job.getRepoUrl(),
+                        job.getDocUrl(),
+                        job.getTaskDescription(),
+                        job.getGitDiff(),
+                        routingConfig);
+
+                ProviderRequest providerRequest = new ProviderRequest(prompt, copilotLlmModel, githubToken);
+                ProviderResponse providerResponse = modelRoutingEngine.executeStage(PipelineStage.PR_SYNTHESIS,
+                        contextInit, providerRequest);
+                String plan = providerResponse.response();
 
                 updateJobState(jobId, JobStatus.COMPLETED, "PLANNING_COMPLETE", plan);
                 log.info("Librarian planning track finalized for job: {}", jobId);
@@ -141,7 +173,7 @@ public class JobController {
 
                 String prompt = String.format(
                         """
-                                You are Antigravity, a premium compliance agent.
+                                You are ARES, a premium compliance agent.
                                 Verify if the following git diff aligns with the codebase reference context and specification/compliance policies.
 
                                 === GIT DIFF ===
@@ -153,8 +185,30 @@ public class JobController {
                                 Please perform a code review, check for compliance, and state whether the changes are approved or if there are any issues.
                                 """,
                         gitDiff, contextPayload);
-                String verificationResult = planningOrchestrationService.generateText(prompt, githubToken,
-                        copilotLlmModel);
+
+                Map<PipelineStage, String> routingConfig = Map.of();
+                if (job.getAuditMetadata() != null) {
+                    try {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        routingConfig = mapper.readValue(job.getAuditMetadata(),
+                                new com.fasterxml.jackson.core.type.TypeReference<Map<PipelineStage, String>>() {
+                                });
+                    } catch (Exception e) {
+                        log.error("Failed to deserialize routingConfiguration", e);
+                    }
+                }
+                JobInitializationRequest contextInit = new JobInitializationRequest(
+                        job.getProjectId(),
+                        job.getRepoUrl(),
+                        job.getDocUrl(),
+                        job.getTaskDescription(),
+                        job.getGitDiff(),
+                        routingConfig);
+
+                ProviderRequest providerRequest = new ProviderRequest(prompt, copilotLlmModel, githubToken);
+                ProviderResponse providerResponse = modelRoutingEngine.executeStage(PipelineStage.COMPLIANCE_EVALUATION,
+                        contextInit, providerRequest);
+                String verificationResult = providerResponse.response();
 
                 // Update Step D: Completion
                 updateJobState(jobId, JobStatus.COMPLETED, "VERIFICATION_COMPLETE", verificationResult);
